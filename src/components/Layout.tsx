@@ -25,18 +25,20 @@ import {
 // quei ruoli (oltre a "dirigente", che vede sempre tutto — vedi il filtro
 // più sotto). Le tre voci di reparto rispecchiano le policy RLS impostate
 // in supabase/migrations/0013_moduli_ruoli.sql.
-const NAV: { to: string; label: string; icon: typeof IconDashboard; roles?: UserRole[] }[] = [
+// "badgeKey" facoltativo: mostra il pallino rosso di notifica preso da
+// useAuth() (vedi AuthContext.tsx e 0029_notifiche_badge.sql).
+const NAV: { to: string; label: string; icon: typeof IconDashboard; roles?: UserRole[]; badgeKey?: 'chat' | 'richieste' }[] = [
   { to: '/', label: 'Dashboard', icon: IconDashboard },
   { to: '/pipeline', label: 'Pipeline clienti', icon: IconPipeline },
   { to: '/clienti', label: 'Clienti', icon: IconClients },
-  { to: '/richieste', label: 'Richieste', icon: IconRequests },
+  { to: '/richieste', label: 'Richieste', icon: IconRequests, badgeKey: 'richieste' },
   { to: '/ricerche', label: 'Ricerca&Sviluppo', icon: IconResearch, roles: ['dottore_laboratorio'] },
   { to: '/fornitori', label: 'Fornitori', icon: IconSuppliers, roles: ['ufficio_acquisti'] },
   { to: '/acquisti', label: 'Pipeline acquisti', icon: IconPipeline, roles: ['ufficio_acquisti'] },
   { to: '/calendario', label: 'Calendario', icon: IconCalendar },
   { to: '/marketing', label: 'Marketing', icon: IconMarketing },
   { to: '/report', label: 'Report e analytics', icon: IconReport },
-  { to: '/chat', label: 'Chat', icon: IconChat },
+  { to: '/chat', label: 'Chat', icon: IconChat, badgeKey: 'chat' },
   { to: '/utenti', label: 'Utenti', icon: IconUsers, roles: ['dirigente'] },
 ]
 
@@ -51,7 +53,7 @@ function readStoredCollapsed(): boolean {
 }
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { profile, signOut } = useAuth()
+  const { profile, signOut, unreadChatCount, newRequestsCount } = useAuth()
   // Menu comprimibile: a icone soltanto, così le pagine (bacheca pipeline,
   // elenchi, calendario) guadagnano spazio orizzontale. La preferenza resta
   // salvata nel browser da una sessione all'altra.
@@ -65,6 +67,11 @@ export function Layout({ children }: { children: ReactNode }) {
       // semplicemente non viene ricordata, non è un problema bloccante.
     }
   }, [collapsed])
+
+  const badgeCounts: Record<'chat' | 'richieste', number> = {
+    chat: unreadChatCount,
+    richieste: newRequestsCount,
+  }
 
   return (
     <div className="shell">
@@ -89,6 +96,7 @@ export function Layout({ children }: { children: ReactNode }) {
         <nav className="nav">
           {NAV.filter((item) => !item.roles || item.roles.includes(profile?.role as UserRole) || profile?.role === 'dirigente').map((item) => {
             const Icon = item.icon
+            const badgeCount = item.badgeKey ? badgeCounts[item.badgeKey] : 0
             return (
               <NavLink
                 key={item.to}
@@ -99,6 +107,7 @@ export function Layout({ children }: { children: ReactNode }) {
               >
                 <Icon className="nav-item-icon" />
                 <span className="nav-item-label">{item.label}</span>
+                {badgeCount > 0 && <span className="nav-badge">{badgeCount > 99 ? '99+' : badgeCount}</span>}
               </NavLink>
             )
           })}

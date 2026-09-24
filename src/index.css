@@ -710,3 +710,25 @@ a.client-deal-row:hover { background: var(--surface-2); border-radius: 6px; }
   .import-map-grid { grid-template-columns: 1fr; }
   .view-head { flex-wrap: wrap; gap: 10px; }
 }
+
+/* Pallino di notifica nel menu laterale (Chat, Richieste) */
+.nav-badge {
+  position: absolute;
+  top: 4px;
+  right: 8px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: #e5484d;
+  color: #fff;
+  font-size: 10px;
+  font-weight: 800;
+  line-height: 16px;
+  text-align: center;
+  pointer-events: none;
+}
+.sidebar-collapsed .nav-badge {
+  top: 2px;
+  right: 6px;
+}

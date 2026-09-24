@@ -19,7 +19,7 @@ function timeLabel(iso: string): string {
 }
 
 export function Chat() {
-  const { profile } = useAuth()
+  const { profile, markChatSeen } = useAuth()
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [authors, setAuthors] = useState<Map<string, string>>(new Map())
   const [body, setBody] = useState('')
@@ -54,6 +54,11 @@ export function Chat() {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    // Finché questa pagina è aperta, ogni volta che arriva/parte un messaggio
+    // segniamo la chat come "vista adesso": così il pallino rosso nel menu
+    // resta a zero mentre l'utente è qui, invece di aumentare sotto i suoi
+    // occhi.
+    markChatSeen()
   }, [messages.length])
 
   async function handleSubmit(e: FormEvent) {

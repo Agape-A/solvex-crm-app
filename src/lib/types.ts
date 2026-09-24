@@ -37,6 +37,7 @@ export interface Profile {
   initials: string
   email: string | null
   created_at: string
+  chat_last_seen_at: string
 }
 
 export interface Client {
