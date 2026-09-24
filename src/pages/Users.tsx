@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { ALL_ROLES, ROLE_LABELS, type Profile, type UserRole } from '../lib/types'
+import { ALL_ROLES, hasFullAccess, ROLE_LABELS, type Profile, type UserRole } from '../lib/types'
 
 // Pagina "Utenti", riservata alla direzione: qui si corregge il nome e il
 // ruolo di chi è già stato invitato. Creare un nuovo account resta un
@@ -70,7 +70,7 @@ export function Users() {
     await load()
   }
 
-  if (profile?.role !== 'dirigente') {
+  if (!hasFullAccess(profile?.role)) {
     return (
       <div className="view">
         <p className="muted">Questa pagina è riservata alla direzione.</p>

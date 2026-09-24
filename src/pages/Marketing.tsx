@@ -12,7 +12,7 @@ import {
   type MarketingListMember,
 } from '../lib/types'
 
-const CAN_ACCESS: string[] = ['commerciale', 'dirigente']
+const CAN_ACCESS: string[] = ['tecnico', 'commerciale', 'dirigente', 'amministrazione']
 const ALL_LISTS = '__tutti__'
 // Palette categorica validata (skill dataviz): ordine fisso, mai ciclato.
 const CATEGORICAL = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100']

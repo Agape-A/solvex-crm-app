@@ -17,7 +17,7 @@ import {
 } from '../lib/types'
 
 const TYPE_FILTERS: (ClientType | 'tutti')[] = ['tutti', 'conceria', 'distributore', 'azienda_chimica']
-const CAN_WRITE: string[] = ['commerciale', 'dirigente']
+const CAN_WRITE: string[] = ['commerciale', 'dirigente', 'amministrazione']
 const currency = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 
 export function Clients() {
@@ -37,7 +37,7 @@ export function Clients() {
   const [deleting, setDeleting] = useState(false)
 
   const canWrite = profile ? CAN_WRITE.includes(profile.role) : false
-  const canSeeDeals = profile ? ['tecnico', 'commerciale', 'dirigente'].includes(profile.role) : false
+  const canSeeDeals = profile ? ['tecnico', 'commerciale', 'dirigente', 'amministrazione'].includes(profile.role) : false
 
   async function loadClients() {
     setLoading(true)

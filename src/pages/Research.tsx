@@ -15,7 +15,7 @@ import {
 
 // Pagina visibile solo a "dottore_laboratorio" e "dirigente" — vedi
 // supabase/migrations/0013_moduli_ruoli.sql per le policy RLS gemelle.
-const CAN_ACCESS = ['dottore_laboratorio', 'dirigente']
+const CAN_ACCESS = ['dottore_laboratorio', 'dirigente', 'amministrazione']
 const STATUSES = Object.keys(RESEARCH_STATUS_LABELS) as ResearchStatus[]
 
 export function Research() {

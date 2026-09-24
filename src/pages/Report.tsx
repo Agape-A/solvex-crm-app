@@ -6,6 +6,7 @@ import {
   APPOINTMENT_TYPE_LABELS,
   CLIENT_TYPE_LABELS,
   DEAL_STAGES,
+  hasFullAccess,
   MARKETING_SOURCE_LABELS,
   PURCHASE_STATUSES,
   RESEARCH_STATUS_LABELS,
@@ -219,11 +220,11 @@ export function Report() {
   // stesse regole delle pagine dedicate (Pipeline, Ricerca&Sviluppo, Acquisti,
   // vedi 0013_moduli_ruoli.sql). La RLS impedirebbe comunque la lettura a chi
   // non ha il ruolo giusto: qui evitiamo solo la query inutile.
-  const canSeeCommerciale = profile ? ['tecnico', 'commerciale', 'dirigente'].includes(profile.role) : false
-  const canSeeMarketing = profile ? ['commerciale', 'dirigente'].includes(profile.role) : false
-  const canSeeResearch = profile ? ['dottore_laboratorio', 'dirigente'].includes(profile.role) : false
-  const canSeeAcquisti = profile ? ['ufficio_acquisti', 'dirigente'].includes(profile.role) : false
-  const isDirigente = profile?.role === 'dirigente'
+  const canSeeCommerciale = profile ? ['tecnico', 'commerciale', 'dirigente', 'amministrazione'].includes(profile.role) : false
+  const canSeeMarketing = profile ? ['tecnico', 'commerciale', 'dirigente', 'amministrazione'].includes(profile.role) : false
+  const canSeeResearch = profile ? ['dottore_laboratorio', 'dirigente', 'amministrazione'].includes(profile.role) : false
+  const canSeeAcquisti = profile ? ['ufficio_acquisti', 'dirigente', 'amministrazione'].includes(profile.role) : false
+  const isDirigente = hasFullAccess(profile?.role)
 
   async function reloadTargets() {
     const { data } = await supabase.from('annual_targets').select('*')

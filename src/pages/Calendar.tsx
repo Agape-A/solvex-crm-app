@@ -75,13 +75,20 @@ export function Calendar() {
   const [selectedDay, setSelectedDay] = useState<Date | null>(null)
   const [openAppointmentId, setOpenAppointmentId] = useState<string | null>(null)
 
-  const canSeeAppointments = profile ? ['tecnico', 'commerciale', 'dirigente'].includes(profile.role) : false
-  const canCreateAppointment = profile?.role === 'commerciale' || profile?.role === 'dirigente'
+  // "Prossima azione" sulle trattative è un dato di Pipeline clienti: solo
+  // chi vede quella pipeline lo vede anche qui. Gli appuntamenti invece
+  // valgono anche per Ricerca&Sviluppo e Ufficio acquisti — per loro la RLS
+  // (0031_policy_reparti.sql) restituisce solo i propri, assegnati a loro.
+  const canSeeDealActions = profile ? ['tecnico', 'commerciale', 'dirigente', 'amministrazione'].includes(profile.role) : false
+  const canSeeAppointments = profile
+    ? ['tecnico', 'commerciale', 'dirigente', 'amministrazione', 'dottore_laboratorio', 'ufficio_acquisti'].includes(profile.role)
+    : false
+  const canCreateAppointment = profile?.role === 'commerciale' || profile?.role === 'dirigente' || profile?.role === 'amministrazione'
 
   async function loadAll() {
     setLoading(true)
     const [dealsRes, requestsRes, apptRes, clientsRes] = await Promise.all([
-      canSeeAppointments
+      canSeeDealActions
         ? supabase.from('deals').select('*').not('next_action', 'is', null)
         : Promise.resolve({ data: [] as Deal[], error: null }),
       supabase.from('requests').select('*').not('due_date', 'is', null),
@@ -102,7 +109,7 @@ export function Calendar() {
   useEffect(() => {
     loadAll()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canSeeAppointments])
+  }, [canSeeDealActions, canSeeAppointments])
 
   const items: CalendarItem[] = useMemo(
     () =>

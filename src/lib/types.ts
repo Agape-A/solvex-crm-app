@@ -2,7 +2,14 @@
 // mano è accettabile per un progetto piccolo; su un team più grande conviene
 // generarli con `supabase gen types typescript`.
 
-export type UserRole = 'operatore' | 'tecnico' | 'commerciale' | 'dirigente' | 'dottore_laboratorio' | 'ufficio_acquisti'
+export type UserRole =
+  | 'operatore'
+  | 'tecnico'
+  | 'commerciale'
+  | 'dirigente'
+  | 'dottore_laboratorio'
+  | 'ufficio_acquisti'
+  | 'amministrazione'
 export const ROLE_LABELS: Record<UserRole, string> = {
   operatore: 'Operatore',
   tecnico: 'Tecnico',
@@ -10,8 +17,26 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   dirigente: 'Dirigente',
   dottore_laboratorio: 'Ricerca&Sviluppo',
   ufficio_acquisti: 'Ufficio acquisti',
+  amministrazione: 'Amministrazione',
 }
-export const ALL_ROLES: UserRole[] = ['operatore', 'tecnico', 'commerciale', 'dirigente', 'dottore_laboratorio', 'ufficio_acquisti']
+export const ALL_ROLES: UserRole[] = [
+  'operatore',
+  'tecnico',
+  'commerciale',
+  'dirigente',
+  'dottore_laboratorio',
+  'ufficio_acquisti',
+  'amministrazione',
+]
+// Ruoli con accesso completo a tutte le pagine e a tutti i dati, come
+// "dirigente" — vedi supabase/migrations/0031_policy_reparti.sql, dove ogni
+// policy scritta "in (..., 'dirigente')" diventa "in (..., 'dirigente',
+// 'amministrazione')". Usato lato client per evitare di ripetere l'elenco
+// in ogni pagina (Layout, Dashboard, Calendar, Report, ecc.).
+export const FULL_ACCESS_ROLES: UserRole[] = ['dirigente', 'amministrazione']
+export function hasFullAccess(role: UserRole | undefined): boolean {
+  return !!role && (FULL_ACCESS_ROLES as UserRole[]).includes(role)
+}
 export type DealStage = 'lead' | 'qualificato' | 'proposta' | 'trattativa' | 'vinto' | 'perso'
 export type RequestType = 'interna' | 'esterna'
 export type RequestDepartment = 'commerciale' | 'tecnico' | 'operativo' | 'amministrazione'

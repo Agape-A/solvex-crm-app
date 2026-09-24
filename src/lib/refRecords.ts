@@ -37,12 +37,12 @@ export const REQUEST_REF_TABLES: RequestRefTable[] = [
 // scrivendo (la RLS del database lo impedirebbe comunque, questo è solo per
 // non confondere in interfaccia).
 export const REQUEST_REF_ROLES: Record<RequestRefTable, UserRole[]> = {
-  deals: ['tecnico', 'commerciale', 'dirigente'],
-  clients: ['tecnico', 'commerciale', 'dirigente'],
-  research_records: ['dottore_laboratorio', 'dirigente'],
-  suppliers: ['ufficio_acquisti', 'dirigente'],
-  purchase_requests: ['ufficio_acquisti', 'dirigente'],
-  procurement_activities: ['ufficio_acquisti', 'dirigente'],
+  deals: ['tecnico', 'commerciale', 'dirigente', 'amministrazione'],
+  clients: ['tecnico', 'commerciale', 'dirigente', 'amministrazione'],
+  research_records: ['dottore_laboratorio', 'dirigente', 'amministrazione'],
+  suppliers: ['ufficio_acquisti', 'dirigente', 'amministrazione'],
+  purchase_requests: ['ufficio_acquisti', 'dirigente', 'amministrazione'],
+  procurement_activities: ['ufficio_acquisti', 'dirigente', 'amministrazione'],
 }
 
 export function refLinkPath(refTable: string, refId: string): string {

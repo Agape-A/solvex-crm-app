@@ -27,7 +27,7 @@ import {
   type Urgenza,
 } from '../lib/types'
 
-const CAN_CREATE_DELETE: string[] = ['commerciale', 'dirigente']
+const CAN_CREATE_DELETE: string[] = ['commerciale', 'dirigente', 'amministrazione']
 
 const currency = new Intl.NumberFormat('it-IT', {
   style: 'currency',
@@ -136,7 +136,7 @@ export function Pipeline() {
   // Il tecnico vede tutto ma, per via del trigger nel database, può salvare
   // solo modifiche al campo "note": niente trascinamento, niente cambio fase
   // o proprietario — il vero controllo resta comunque lato server (0003_triggers.sql).
-  const canEditFields = profile?.role === 'commerciale' || profile?.role === 'dirigente'
+  const canEditFields = profile?.role === 'commerciale' || profile?.role === 'dirigente' || profile?.role === 'amministrazione'
 
   async function loadDeals() {
     setLoading(true)
@@ -215,7 +215,10 @@ export function Pipeline() {
 
   const ownerMap = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles])
   const ownerOptions = useMemo(
-    () => profiles.filter((p) => p.role === 'commerciale' || p.role === 'dirigente').sort((a, b) => a.full_name.localeCompare(b.full_name)),
+    () =>
+      profiles
+        .filter((p) => p.role === 'commerciale' || p.role === 'dirigente' || p.role === 'amministrazione')
+        .sort((a, b) => a.full_name.localeCompare(b.full_name)),
     [profiles],
   )
 

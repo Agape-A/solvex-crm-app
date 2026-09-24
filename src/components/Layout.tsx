@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { CLIENT_TYPE_LABELS, type Client, type UserRole } from '../lib/types'
+import { CLIENT_TYPE_LABELS, hasFullAccess, type Client, type UserRole } from '../lib/types'
 import {
   IconDashboard,
   IconPipeline,
@@ -22,24 +22,51 @@ import {
 } from './Icons'
 
 // "roles" facoltativo: se presente, la voce compare solo a chi ha uno di
-// quei ruoli (oltre a "dirigente", che vede sempre tutto — vedi il filtro
-// più sotto). Le tre voci di reparto rispecchiano le policy RLS impostate
-// in supabase/migrations/0013_moduli_ruoli.sql.
+// quei ruoli (oltre a dirigente/amministrazione, che vedono sempre tutto —
+// vedi hasFullAccess() e il filtro più sotto). Le voci per reparto
+// rispecchiano le policy RLS impostate in
+// supabase/migrations/0013_moduli_ruoli.sql e 0031_policy_reparti.sql —
+// pagina per pagina, "chi vede cosa":
+//   operatore/tecnico/commerciale → lato clienti (Pipeline clienti,
+//     Clienti, Richieste, Marketing); tecnico e commerciale anche
+//     Calendario.
+//   dottore_laboratorio (Ricerca&Sviluppo) → solo le proprie Richieste
+//     (quelle assegnate a lui/lei), la pagina Ricerca&Sviluppo, Calendario
+//     (solo le proprie scadenze/appuntamenti).
+//   ufficio_acquisti → Pipeline acquisti, Fornitori, Calendario (idem, solo
+//     proprio).
+// Dashboard e Chat restano visibili a chiunque sia autenticato.
 // "badgeKey" facoltativo: mostra il pallino rosso di notifica preso da
 // useAuth() (vedi AuthContext.tsx e 0029_notifiche_badge.sql).
 const NAV: { to: string; label: string; icon: typeof IconDashboard; roles?: UserRole[]; badgeKey?: 'chat' | 'richieste' }[] = [
   { to: '/', label: 'Dashboard', icon: IconDashboard },
-  { to: '/pipeline', label: 'Pipeline clienti', icon: IconPipeline },
-  { to: '/clienti', label: 'Clienti', icon: IconClients },
-  { to: '/richieste', label: 'Richieste', icon: IconRequests, badgeKey: 'richieste' },
+  { to: '/pipeline', label: 'Pipeline clienti', icon: IconPipeline, roles: ['operatore', 'tecnico', 'commerciale'] },
+  { to: '/clienti', label: 'Clienti', icon: IconClients, roles: ['operatore', 'tecnico', 'commerciale'] },
+  {
+    to: '/richieste',
+    label: 'Richieste',
+    icon: IconRequests,
+    badgeKey: 'richieste',
+    roles: ['operatore', 'tecnico', 'commerciale', 'dottore_laboratorio'],
+  },
   { to: '/ricerche', label: 'Ricerca&Sviluppo', icon: IconResearch, roles: ['dottore_laboratorio'] },
   { to: '/fornitori', label: 'Fornitori', icon: IconSuppliers, roles: ['ufficio_acquisti'] },
   { to: '/acquisti', label: 'Pipeline acquisti', icon: IconPipeline, roles: ['ufficio_acquisti'] },
-  { to: '/calendario', label: 'Calendario', icon: IconCalendar },
-  { to: '/marketing', label: 'Marketing', icon: IconMarketing },
-  { to: '/report', label: 'Report e analytics', icon: IconReport },
+  {
+    to: '/calendario',
+    label: 'Calendario',
+    icon: IconCalendar,
+    roles: ['operatore', 'tecnico', 'commerciale', 'dottore_laboratorio', 'ufficio_acquisti'],
+  },
+  { to: '/marketing', label: 'Marketing', icon: IconMarketing, roles: ['operatore', 'tecnico', 'commerciale'] },
+  {
+    to: '/report',
+    label: 'Report e analytics',
+    icon: IconReport,
+    roles: ['operatore', 'tecnico', 'commerciale', 'dottore_laboratorio', 'ufficio_acquisti'],
+  },
   { to: '/chat', label: 'Chat', icon: IconChat, badgeKey: 'chat' },
-  { to: '/utenti', label: 'Utenti', icon: IconUsers, roles: ['dirigente'] },
+  { to: '/utenti', label: 'Utenti', icon: IconUsers, roles: ['dirigente', 'amministrazione'] },
 ]
 
 const SIDEBAR_COLLAPSED_KEY = 'solvex-sidebar-collapsed'
@@ -94,7 +121,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
         {!collapsed && <ClientSearch />}
         <nav className="nav">
-          {NAV.filter((item) => !item.roles || item.roles.includes(profile?.role as UserRole) || profile?.role === 'dirigente').map((item) => {
+          {NAV.filter((item) => !item.roles || item.roles.includes(profile?.role as UserRole) || hasFullAccess(profile?.role)).map((item) => {
             const Icon = item.icon
             const badgeCount = item.badgeKey ? badgeCounts[item.badgeKey] : 0
             return (

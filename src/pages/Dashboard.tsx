@@ -28,9 +28,16 @@ export function Dashboard() {
   const [dueRequests, setDueRequests] = useState<Request[]>([])
   const [todayAppointments, setTodayAppointments] = useState<Appointment[]>([])
   const [activity, setActivity] = useState<ActivityLogEntry[]>([])
+  const [researchOpen, setResearchOpen] = useState<number | null>(null)
+  const [suppliersCount, setSuppliersCount] = useState<number | null>(null)
 
-  const canSeePipeline = profile ? ['tecnico', 'commerciale', 'dirigente'].includes(profile.role) : false
+  const canSeePipeline = profile ? ['tecnico', 'commerciale', 'dirigente', 'amministrazione'].includes(profile.role) : false
   const canSeeAppointments = canSeePipeline
+  // Ricerca&Sviluppo e Ufficio acquisti non hanno una "Pipeline clienti":
+  // la prima tile della riga in alto diventa quindi qualcosa di pertinente
+  // al loro reparto invece di un link morto a una pagina che non vedono.
+  const isResearch = profile?.role === 'dottore_laboratorio'
+  const isAcquisti = profile?.role === 'ufficio_acquisti'
 
   useEffect(() => {
     // Il conteggio rispecchia solo ciò che la RLS permette di vedere al ruolo
@@ -92,8 +99,23 @@ export function Dashboard() {
         .order('appointment_at')
         .then(({ data }) => setTodayAppointments((data as Appointment[]) ?? []))
     }
+
+    if (isResearch) {
+      supabase
+        .from('research_records')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'in_corso')
+        .then(({ count }) => setResearchOpen(count ?? 0))
+    }
+
+    if (isAcquisti) {
+      supabase
+        .from('suppliers')
+        .select('id', { count: 'exact', head: true })
+        .then(({ count }) => setSuppliersCount(count ?? 0))
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canSeePipeline])
+  }, [canSeePipeline, isResearch, isAcquisti])
 
   const hasAlerts = rottingDeals.length > 0 || dueRequests.length > 0 || todayAppointments.length > 0
 
@@ -107,10 +129,24 @@ export function Dashboard() {
       </div>
 
       <div className="tile-row">
-        <Link to="/pipeline" className="card tile">
-          <div className="tile-label">Trattative aperte</div>
-          <div className="tile-value">{dealsOpen ?? '—'}</div>
-        </Link>
+        {isResearch && (
+          <Link to="/ricerche" className="card tile">
+            <div className="tile-label">Ricerche in corso</div>
+            <div className="tile-value">{researchOpen ?? '—'}</div>
+          </Link>
+        )}
+        {isAcquisti && (
+          <Link to="/fornitori" className="card tile">
+            <div className="tile-label">Fornitori in anagrafica</div>
+            <div className="tile-value">{suppliersCount ?? '—'}</div>
+          </Link>
+        )}
+        {!isResearch && !isAcquisti && (
+          <Link to="/pipeline" className="card tile">
+            <div className="tile-label">Trattative aperte</div>
+            <div className="tile-value">{dealsOpen ?? '—'}</div>
+          </Link>
+        )}
         <Link to="/richieste" className="card tile">
           <div className="tile-label">Richieste aperte</div>
           <div className="tile-value">{requestsOpen ?? '—'}</div>

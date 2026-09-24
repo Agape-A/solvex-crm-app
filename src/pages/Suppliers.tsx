@@ -11,7 +11,7 @@ import { PURCHASE_STATUS_LABELS, type PurchaseRequest, type Supplier } from '../
 // cronologia delle richieste d'acquisto collegate, tag e commenti condivisi.
 // Visibile solo a "ufficio_acquisti" e "dirigente" — vedi
 // supabase/migrations/0013_moduli_ruoli.sql e 0014_pipeline_acquisti.sql.
-const CAN_ACCESS = ['ufficio_acquisti', 'dirigente']
+const CAN_ACCESS = ['ufficio_acquisti', 'dirigente', 'amministrazione']
 const currency = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 
 export function Suppliers() {

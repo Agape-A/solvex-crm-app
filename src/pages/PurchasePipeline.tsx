@@ -43,7 +43,7 @@ import {
 // consultabili e aggiornabili, ma da "+ Nuova richiesta" non se ne creano
 // più di nuove — non era nello schema di Andrea. Visibile solo a
 // "ufficio_acquisti" e "dirigente" — vedi 0013_moduli_ruoli.sql.
-const CAN_ACCESS = ['ufficio_acquisti', 'dirigente']
+const CAN_ACCESS = ['ufficio_acquisti', 'dirigente', 'amministrazione']
 
 const currency = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 
