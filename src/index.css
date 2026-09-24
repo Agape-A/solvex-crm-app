@@ -477,6 +477,7 @@ a.tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border
 
 /* ---- report / grafici ---- */
 .tile-row-4 { grid-template-columns: repeat(4, 1fr); }
+.tile-row-5 { grid-template-columns: repeat(5, 1fr); }
 .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
 
 .barlist { display: flex; flex-direction: column; gap: 10px; }
@@ -702,7 +703,7 @@ a.client-deal-row:hover { background: var(--surface-2); border-radius: 6px; }
   .pipeline-summary { grid-template-columns: repeat(2, 1fr); }
   .pipeline-view-toggle { margin-left: 0; }
   .pcol-weighted, .pcol-action { display: none; }
-  .tile-row-4 { grid-template-columns: repeat(2, 1fr); }
+  .tile-row-4, .tile-row-5 { grid-template-columns: repeat(2, 1fr); }
   .chart-grid { grid-template-columns: 1fr; }
   .barlist-row { grid-template-columns: 80px 1fr auto; }
   .cal-row { flex-wrap: wrap; }

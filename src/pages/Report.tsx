@@ -289,6 +289,7 @@ export function Report() {
 
   const pipelineAperta = deals.filter((d) => d.stage !== 'vinto' && d.stage !== 'perso')
   const vinti = deals.filter((d) => d.stage === 'vinto')
+  const persi = deals.filter((d) => d.stage === 'perso')
   const valorePipelineAperta = pipelineAperta.reduce((s, d) => s + Number(d.value_estimate), 0)
   const valoreVinto = vinti.reduce((s, d) => s + Number(d.value_estimate), 0)
 
@@ -417,10 +418,14 @@ export function Report() {
       {isDirigente && (
         <>
           <div className="section-title">Direzione — vista d'insieme</div>
-          <div className="tile-row tile-row-4">
+          <div className="tile-row tile-row-5">
             <div className="card tile">
-              <div className="tile-label">Pipeline aperta</div>
-              <div className="tile-value">{currency.format(valorePipelineAperta)}</div>
+              <div className="tile-label">Trattative vinte</div>
+              <div className="tile-value">{vinti.length}</div>
+            </div>
+            <div className="card tile">
+              <div className="tile-label">Trattative perse</div>
+              <div className="tile-value">{persi.length}</div>
             </div>
             <div className="card tile">
               <div className="tile-label">Richieste aperte</div>
