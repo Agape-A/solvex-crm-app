@@ -98,6 +98,18 @@ export const URGENZA_LABELS: Record<Urgenza, string> = {
   alta: 'Alta (in giornata)',
 }
 
+// "Descrizione analisi" di una Richiesta analisi campione (fornitore o
+// cliente) — vedi ProcurementActivityRichiestaAnalisiCampioneFornitore /
+// DealActivityRichiestaAnalisiCampioneCliente più sotto. "test_pelle" è
+// un'opzione solo per il campione cliente (non ha senso per un fornitore).
+export type TipoAnalisi = 'comparativa' | 'nuovo_prodotto' | 'test_pelle'
+
+export const TIPO_ANALISI_LABELS: Record<TipoAnalisi, string> = {
+  comparativa: 'Comparativa',
+  nuovo_prodotto: 'Analisi nuovo prodotto',
+  test_pelle: 'Test pelle',
+}
+
 export const REPARTI_RIUNIONE = [
   'Tecnico',
   'Commerciale',
@@ -170,12 +182,34 @@ export interface DealActivityRiunioneInterna {
   temi_trattati: string
 }
 
+// Richiesta di analisi di un campione cliente, girata al laboratorio
+// Ricerca&Sviluppo (assegnata via "Assegnazione attività a", come tutte le
+// altre attività guidate). "richiesto_da" è chi ha fatto la richiesta, non
+// necessariamente chi la sta inserendo nel CRM.
+export interface DealActivityRichiestaAnalisiCampioneCliente {
+  tag: 'RICHIESTA ANALISI CAMPIONE CLIENTE'
+  descrizione_prodotto: string
+  scheda_tecnica_url: string | null
+  scheda_tecnica_name: string | null
+  msds_url: string | null
+  msds_name: string | null
+  tipo_analisi: TipoAnalisi | ''
+  prodotto_da_comparare: string
+  descrizione_richieste_analisi: string
+  descrizione_analisi_test_pelle: string
+  metodo_test: string
+  prossimi_passi: string
+  urgenza: Urgenza | ''
+  richiesto_da: string
+}
+
 export type DealActivityDetails =
   | DealActivityPrimaVisita
   | DealActivityVisitaCommerciale
   | DealActivityVisitaTecnica
   | DealActivityReclamoCliente
   | DealActivityRiunioneInterna
+  | DealActivityRichiestaAnalisiCampioneCliente
   | null
 
 // ============ Pipeline Acquisti: attività guidate (Visita Fornitore,
@@ -239,11 +273,33 @@ export interface ProcurementActivityRiunioneInterna {
   temi_trattati: string
 }
 
+// Richiesta di analisi di un campione fornitore, girata al laboratorio
+// Ricerca&Sviluppo (assegnata via "Assegnazione attività a", come tutte le
+// altre attività guidate). "richiesto_da" è chi ha fatto la richiesta, non
+// necessariamente chi la sta inserendo nel CRM. Niente "test pelle" qui,
+// opzione pensata solo per il campione cliente.
+export interface ProcurementActivityRichiestaAnalisiCampioneFornitore {
+  tag: 'RICHIESTA ANALISI CAMPIONE FORNITORE'
+  descrizione_prodotto: string
+  scheda_tecnica_url: string | null
+  scheda_tecnica_name: string | null
+  msds_url: string | null
+  msds_name: string | null
+  tipo_analisi: TipoAnalisi | ''
+  prodotto_da_comparare: string
+  descrizione_richieste_analisi: string
+  prossimi_passi: string
+  prossimi_passi_data: string
+  urgenza: Urgenza | ''
+  richiesto_da: string
+}
+
 export type ProcurementActivityDetails =
   | ProcurementActivityVisitaFornitore
   | ProcurementActivityReclamoFornitore
   | ProcurementActivityReclamoCliente
   | ProcurementActivityRiunioneInterna
+  | ProcurementActivityRichiestaAnalisiCampioneFornitore
   | null
 
 export interface ProcurementActivity {

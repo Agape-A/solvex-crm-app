@@ -11,6 +11,7 @@ import {
   NATURA_RECLAMO_LABELS,
   REPARTI_RIUNIONE,
   RICEZIONE_RECLAMO_LABELS,
+  TIPO_ANALISI_LABELS,
   URGENZA_LABELS,
   type Client,
   type ClientType,
@@ -22,6 +23,7 @@ import {
   type PendingAssignment,
   type Profile,
   type RicezioneReclamo,
+  type TipoAnalisi,
   type Urgenza,
 } from '../lib/types'
 
@@ -644,6 +646,40 @@ function ActivityDetailsView({ details }: { details: DealActivityDetails }) {
     )
   }
 
+  if (details.tag === 'RICHIESTA ANALISI CAMPIONE CLIENTE') {
+    return (
+      <div className="activity-details-view">
+        <span className="activity-details-title">Dettagli · Richiesta analisi campione cliente</span>
+        <div className="activity-details-grid">
+          {details.richiesto_da && <span><strong>Richiesta da:</strong> {details.richiesto_da}</span>}
+          {details.descrizione_prodotto && <span><strong>Descrizione prodotto:</strong> {details.descrizione_prodotto}</span>}
+          {details.scheda_tecnica_url && (
+            <span>
+              <strong>Scheda tecnica:</strong>{' '}
+              <a href={details.scheda_tecnica_url} target="_blank" rel="noreferrer">📎 {details.scheda_tecnica_name}</a>
+            </span>
+          )}
+          {details.msds_url && (
+            <span>
+              <strong>MSDS:</strong> <a href={details.msds_url} target="_blank" rel="noreferrer">📎 {details.msds_name}</a>
+            </span>
+          )}
+          {details.tipo_analisi && <span><strong>Descrizione analisi:</strong> {TIPO_ANALISI_LABELS[details.tipo_analisi]}</span>}
+          {details.prodotto_da_comparare && <span><strong>Prodotto da comparare:</strong> {details.prodotto_da_comparare}</span>}
+          {details.descrizione_richieste_analisi && (
+            <span><strong>Descrizione richieste analisi:</strong> {details.descrizione_richieste_analisi}</span>
+          )}
+          {details.descrizione_analisi_test_pelle && (
+            <span><strong>Descrizione analisi (test pelle):</strong> {details.descrizione_analisi_test_pelle}</span>
+          )}
+          {details.metodo_test && <span><strong>Metodo test:</strong> {details.metodo_test}</span>}
+          {details.prossimi_passi && <span><strong>Prossimi passi:</strong> {details.prossimi_passi}</span>}
+          {details.urgenza && <span><strong>Urgenza:</strong> {URGENZA_LABELS[details.urgenza]}</span>}
+        </div>
+      </div>
+    )
+  }
+
   return null
 }
 
@@ -828,7 +864,11 @@ const ACTIVITY_TYPES = [
   'VISITA TECNICA CLIENTE',
   'RECLAMO CLIENTE',
   'RIUNIONE INTERNA',
+  'RICHIESTA ANALISI CAMPIONE CLIENTE',
 ] as const
+// "Descrizione analisi" della richiesta campione cliente include anche "Test
+// pelle", opzione non prevista lato fornitore (vedi PurchasePipeline.tsx).
+const TIPO_ANALISI_OPTIONS_CLIENTE: TipoAnalisi[] = ['comparativa', 'nuovo_prodotto', 'test_pelle']
 
 function NewDealForm({
   clients,
@@ -900,6 +940,24 @@ function NewDealForm({
   const [personePresenti, setPersonePresenti] = useState('')
   const [temiTrattatiRiunione, setTemiTrattatiRiunione] = useState('')
 
+  // RICHIESTA ANALISI CAMPIONE CLIENTE
+  const [descrizioneProdottoAnalisi, setDescrizioneProdottoAnalisi] = useState('')
+  const [schedaTecnicaUrl, setSchedaTecnicaUrl] = useState<string | null>(null)
+  const [schedaTecnicaName, setSchedaTecnicaName] = useState<string | null>(null)
+  const [uploadingSchedaTecnica, setUploadingSchedaTecnica] = useState(false)
+  const [msdsUrl, setMsdsUrl] = useState<string | null>(null)
+  const [msdsName, setMsdsName] = useState<string | null>(null)
+  const [uploadingMsds, setUploadingMsds] = useState(false)
+  const [tipoAnalisi, setTipoAnalisi] = useState<TipoAnalisi | ''>('')
+  const [prodottoDaComparare, setProdottoDaComparare] = useState('')
+  const [descrizioneRichiesteAnalisi, setDescrizioneRichiesteAnalisi] = useState('')
+  const [descrizioneAnalisiTestPelle, setDescrizioneAnalisiTestPelle] = useState('')
+  const [metodoTest, setMetodoTest] = useState('')
+  const [prossimiPassiAnalisi, setProssimiPassiAnalisi] = useState('')
+  const [prossimiPassiDataAnalisi, setProssimiPassiDataAnalisi] = useState('')
+  const [urgenzaAnalisi, setUrgenzaAnalisi] = useState<Urgenza | ''>('')
+  const [richiestoDaAnalisi, setRichiestoDaAnalisi] = useState('')
+
   // Assegnazione attività a: comune a tutti i tipi.
   const [assignments, setAssignments] = useState<PendingAssignment[]>([])
 
@@ -933,6 +991,44 @@ function NewDealForm({
     setAttachmentName(file.name)
   }
 
+  // Due allegati distinti per la richiesta analisi campione (scheda tecnica
+  // e MSDS): stesso bucket "deal-attachments" degli altri allegati, solo
+  // due handler separati così restano due file indipendenti invece di uno
+  // che sovrascrive l'altro.
+  async function handleSchedaTecnicaChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingSchedaTecnica(true)
+    const path = `scheda-tecnica-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+    const { error } = await supabase.storage.from('deal-attachments').upload(path, file, { upsert: true })
+    setUploadingSchedaTecnica(false)
+    e.target.value = ''
+    if (error) {
+      alert('Non è stato possibile caricare la scheda tecnica: ' + error.message)
+      return
+    }
+    const { data } = supabase.storage.from('deal-attachments').getPublicUrl(path)
+    setSchedaTecnicaUrl(data.publicUrl)
+    setSchedaTecnicaName(file.name)
+  }
+
+  async function handleMsdsChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingMsds(true)
+    const path = `msds-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+    const { error } = await supabase.storage.from('deal-attachments').upload(path, file, { upsert: true })
+    setUploadingMsds(false)
+    e.target.value = ''
+    if (error) {
+      alert('Non è stato possibile caricare la MSDS: ' + error.message)
+      return
+    }
+    const { data } = supabase.storage.from('deal-attachments').getPublicUrl(path)
+    setMsdsUrl(data.publicUrl)
+    setMsdsName(file.name)
+  }
+
   // Non c'è più un campo "prodotto" generico da compilare a mano: i campi
   // guidati del tag attività bastano e sono più precisi. Il campo
   // deals.product resta però obbligatorio a livello di database (serve
@@ -946,6 +1042,7 @@ function NewDealForm({
     if (activityTag === 'RECLAMO CLIENTE') {
       return nomeProdotto.trim() || descrizioneProdotto.trim() || descrizioneServizio.trim() || activityTag
     }
+    if (activityTag === 'RICHIESTA ANALISI CAMPIONE CLIENTE') return descrizioneProdottoAnalisi.trim() || activityTag
     return activityTag
   }
 
@@ -965,6 +1062,17 @@ function NewDealForm({
     } else if (activityTag === 'RIUNIONE INTERNA') {
       if (reparti.length === 0 || !personePresenti.trim() || !temiTrattatiRiunione.trim()) {
         return 'Compila reparti coinvolti, persone presenti e temi trattati.'
+      }
+    } else if (activityTag === 'RICHIESTA ANALISI CAMPIONE CLIENTE') {
+      if (!descrizioneProdottoAnalisi.trim() || !tipoAnalisi || !prossimiPassiAnalisi.trim() || !urgenzaAnalisi || !richiestoDaAnalisi) {
+        return 'Compila descrizione prodotto, descrizione analisi, prossimi passi, urgenza e da chi è stata richiesta.'
+      }
+      if (tipoAnalisi === 'comparativa' && !prodottoDaComparare.trim()) return 'Indica il prodotto da comparare.'
+      if (tipoAnalisi === 'nuovo_prodotto' && !descrizioneRichiesteAnalisi.trim()) {
+        return 'Indica la descrizione delle richieste di analisi.'
+      }
+      if (tipoAnalisi === 'test_pelle' && (!descrizioneAnalisiTestPelle.trim() || !metodoTest.trim())) {
+        return 'Indica descrizione analisi e metodo test per il test pelle.'
       }
     }
     for (const a of assignments) {
@@ -1081,6 +1189,25 @@ function NewDealForm({
         persone_presenti: personePresenti.trim(),
         temi_trattati: temiTrattatiRiunione.trim(),
       }
+    } else if (activityTag === 'RICHIESTA ANALISI CAMPIONE CLIENTE') {
+      activityDetails = {
+        tag: 'RICHIESTA ANALISI CAMPIONE CLIENTE',
+        descrizione_prodotto: descrizioneProdottoAnalisi.trim(),
+        scheda_tecnica_url: schedaTecnicaUrl,
+        scheda_tecnica_name: schedaTecnicaName,
+        msds_url: msdsUrl,
+        msds_name: msdsName,
+        tipo_analisi: tipoAnalisi,
+        prodotto_da_comparare: prodottoDaComparare.trim(),
+        descrizione_richieste_analisi: descrizioneRichiesteAnalisi.trim(),
+        descrizione_analisi_test_pelle: descrizioneAnalisiTestPelle.trim(),
+        metodo_test: metodoTest.trim(),
+        prossimi_passi: prossimiPassiAnalisi.trim(),
+        urgenza: urgenzaAnalisi,
+        richiesto_da: richiestoDaAnalisi,
+      }
+      nextAction = prossimiPassiDataAnalisi || null
+      reclamoPriority = urgenzaAnalisi || undefined
     }
 
     const { data: newDeal, error } = await supabase
@@ -1434,6 +1561,131 @@ function NewDealForm({
             <textarea value={temiTrattatiRiunione} onChange={(e) => setTemiTrattatiRiunione(e.target.value)} required />
           </div>
           <ActivityAssignment profiles={assignees} assignments={assignments} onChange={setAssignments} />
+        </div>
+      )}
+
+      {activityTag === 'RICHIESTA ANALISI CAMPIONE CLIENTE' && (
+        <div className="activity-fields-block">
+          <span className="activity-fields-title">Richiesta analisi campione cliente</span>
+          <div className="field-row">
+            <label className="field-label">Descrizione prodotto</label>
+            <textarea value={descrizioneProdottoAnalisi} onChange={(e) => setDescrizioneProdottoAnalisi(e.target.value)} required />
+          </div>
+
+          <div className="field-row-2">
+            <div className="field-row">
+              <label className="field-label">Schede tecniche (facoltativo)</label>
+              {schedaTecnicaUrl ? (
+                <div className="marketing-attachment-row">
+                  <a href={schedaTecnicaUrl} target="_blank" rel="noreferrer">📎 {schedaTecnicaName}</a>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => { setSchedaTecnicaUrl(null); setSchedaTecnicaName(null) }}
+                  >
+                    Rimuovi
+                  </button>
+                </div>
+              ) : (
+                <input type="file" onChange={handleSchedaTecnicaChange} disabled={uploadingSchedaTecnica} />
+              )}
+              {uploadingSchedaTecnica && <span className="muted">Caricamento…</span>}
+            </div>
+            <div className="field-row">
+              <label className="field-label">MSDS (facoltativo)</label>
+              {msdsUrl ? (
+                <div className="marketing-attachment-row">
+                  <a href={msdsUrl} target="_blank" rel="noreferrer">📎 {msdsName}</a>
+                  <button type="button" className="btn btn-ghost" onClick={() => { setMsdsUrl(null); setMsdsName(null) }}>
+                    Rimuovi
+                  </button>
+                </div>
+              ) : (
+                <input type="file" onChange={handleMsdsChange} disabled={uploadingMsds} />
+              )}
+              {uploadingMsds && <span className="muted">Caricamento…</span>}
+            </div>
+          </div>
+
+          <div className="field-row">
+            <label className="field-label">Descrizione analisi</label>
+            <select value={tipoAnalisi} onChange={(e) => setTipoAnalisi(e.target.value as TipoAnalisi)} required>
+              <option value="">— Seleziona —</option>
+              {TIPO_ANALISI_OPTIONS_CLIENTE.map((t) => (
+                <option key={t} value={t}>
+                  {TIPO_ANALISI_LABELS[t]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {tipoAnalisi === 'comparativa' && (
+            <div className="field-row">
+              <label className="field-label">Prodotto da comparare</label>
+              <input value={prodottoDaComparare} onChange={(e) => setProdottoDaComparare(e.target.value)} required />
+            </div>
+          )}
+          {tipoAnalisi === 'nuovo_prodotto' && (
+            <div className="field-row">
+              <label className="field-label">Descrizione richieste analisi</label>
+              <textarea value={descrizioneRichiesteAnalisi} onChange={(e) => setDescrizioneRichiesteAnalisi(e.target.value)} required />
+            </div>
+          )}
+          {tipoAnalisi === 'test_pelle' && (
+            <div className="field-row-2">
+              <div className="field-row">
+                <label className="field-label">Descrizione analisi</label>
+                <textarea
+                  value={descrizioneAnalisiTestPelle}
+                  onChange={(e) => setDescrizioneAnalisiTestPelle(e.target.value)}
+                  required
+                />
+              </div>
+              <div className="field-row">
+                <label className="field-label">Metodo test</label>
+                <input value={metodoTest} onChange={(e) => setMetodoTest(e.target.value)} required />
+              </div>
+            </div>
+          )}
+
+          <div className="field-row-2">
+            <div className="field-row">
+              <label className="field-label">Prossimi passi</label>
+              <textarea value={prossimiPassiAnalisi} onChange={(e) => setProssimiPassiAnalisi(e.target.value)} required />
+            </div>
+            <div className="field-row">
+              <label className="field-label">Data prossimi passi</label>
+              <input type="date" value={prossimiPassiDataAnalisi} onChange={(e) => setProssimiPassiDataAnalisi(e.target.value)} />
+              <span className="muted">Facoltativa — diventa la prossima azione schedulata sul lead.</span>
+            </div>
+          </div>
+
+          <div className="field-row">
+            <label className="field-label">Urgenza</label>
+            <select value={urgenzaAnalisi} onChange={(e) => setUrgenzaAnalisi(e.target.value as Urgenza)} required>
+              <option value="">— Seleziona —</option>
+              {URGENZA_OPTIONS.map((u) => (
+                <option key={u} value={u}>
+                  {URGENZA_LABELS[u]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field-row">
+            <label className="field-label">Richiesta da</label>
+            <select value={richiestoDaAnalisi} onChange={(e) => setRichiestoDaAnalisi(e.target.value)} required>
+              <option value="">— Seleziona —</option>
+              {assignees.map((p) => (
+                <option key={p.id} value={p.full_name}>
+                  {p.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <ActivityAssignment profiles={assignees} assignments={assignments} onChange={setAssignments} />
+          <p className="muted">L'attività verrà girata al laboratorio Ricerca&Sviluppo tramite l'assegnazione sopra.</p>
         </div>
       )}
 

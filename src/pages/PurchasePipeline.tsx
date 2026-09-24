@@ -11,6 +11,7 @@ import {
   PURCHASE_STATUS_LABELS,
   REPARTI_RIUNIONE,
   RICEZIONE_RECLAMO_LABELS,
+  TIPO_ANALISI_LABELS,
   URGENZA_LABELS,
   type Client,
   type IncontroTipo,
@@ -23,6 +24,7 @@ import {
   type PurchaseStatus,
   type RicezioneReclamo,
   type Supplier,
+  type TipoAnalisi,
   type Urgenza,
 } from '../lib/types'
 
@@ -842,6 +844,36 @@ function ProcurementActivityDetailsView({ details }: { details: ProcurementActiv
     )
   }
 
+  if (details.tag === 'RICHIESTA ANALISI CAMPIONE FORNITORE') {
+    return (
+      <div className="activity-details-grid">
+        {details.richiesto_da && <span><strong>Richiesta da:</strong> {details.richiesto_da}</span>}
+        {details.descrizione_prodotto && <span><strong>Descrizione prodotto:</strong> {details.descrizione_prodotto}</span>}
+        {details.scheda_tecnica_url && (
+          <span>
+            <strong>Scheda tecnica:</strong>{' '}
+            <a href={details.scheda_tecnica_url} target="_blank" rel="noreferrer">📎 {details.scheda_tecnica_name}</a>
+          </span>
+        )}
+        {details.msds_url && (
+          <span>
+            <strong>MSDS:</strong> <a href={details.msds_url} target="_blank" rel="noreferrer">📎 {details.msds_name}</a>
+          </span>
+        )}
+        {details.tipo_analisi && <span><strong>Descrizione analisi:</strong> {TIPO_ANALISI_LABELS[details.tipo_analisi]}</span>}
+        {details.prodotto_da_comparare && <span><strong>Prodotto da comparare:</strong> {details.prodotto_da_comparare}</span>}
+        {details.descrizione_richieste_analisi && (
+          <span><strong>Descrizione richieste analisi:</strong> {details.descrizione_richieste_analisi}</span>
+        )}
+        {details.prossimi_passi && <span><strong>Prossimi passi:</strong> {details.prossimi_passi}</span>}
+        {details.prossimi_passi_data && (
+          <span><strong>Data prossimi passi:</strong> {new Date(details.prossimi_passi_data).toLocaleDateString('it-IT')}</span>
+        )}
+        {details.urgenza && <span><strong>Urgenza:</strong> {URGENZA_LABELS[details.urgenza]}</span>}
+      </div>
+    )
+  }
+
   return (
     <div className="activity-details-grid">
       {details.ricezione && <span><strong>Ricezione reclamo:</strong> {RICEZIONE_RECLAMO_LABELS[details.ricezione]}</span>}
@@ -902,7 +934,16 @@ const RICEZIONE_OPTIONS: RicezioneReclamo[] = ['mail', 'telefonica', 'di_persona
 const NATURA_OPTIONS: NaturaReclamo[] = ['prodotto', 'documentale', 'logistica', 'servizio']
 const URGENZA_OPTIONS: Urgenza[] = ['bassa', 'media', 'alta']
 const PROCUREMENT_INCONTRO_OPTIONS: IncontroTipo[] = ['in_sede', 'presso_cliente', 'fiera']
-const PROCUREMENT_ACTIVITY_TYPES = ['VISITA FORNITORE', 'RECLAMO FORNITORE', 'RECLAMO CLIENTE', 'RIUNIONE INTERNA'] as const
+const PROCUREMENT_ACTIVITY_TYPES = [
+  'VISITA FORNITORE',
+  'RECLAMO FORNITORE',
+  'RECLAMO CLIENTE',
+  'RIUNIONE INTERNA',
+  'RICHIESTA ANALISI CAMPIONE FORNITORE',
+] as const
+// "Descrizione analisi" della richiesta campione fornitore non include "Test
+// pelle" — opzione pensata solo per il campione cliente (vedi Pipeline.tsx).
+const TIPO_ANALISI_OPTIONS_FORNITORE: TipoAnalisi[] = ['comparativa', 'nuovo_prodotto']
 // Stessa idea di NEW_CLIENT_OPTION in Pipeline.tsx: un fornitore non ancora
 // in anagrafica si crea al volo dentro il form, senza dover prima passare
 // dalla pagina Fornitori.
@@ -964,10 +1005,27 @@ function NewProcurementActivityForm({
   const [personePresenti, setPersonePresenti] = useState('')
   const [temiTrattatiRiunione, setTemiTrattatiRiunione] = useState('')
 
+  // RICHIESTA ANALISI CAMPIONE FORNITORE
+  const [descrizioneProdottoAnalisi, setDescrizioneProdottoAnalisi] = useState('')
+  const [schedaTecnicaUrl, setSchedaTecnicaUrl] = useState<string | null>(null)
+  const [schedaTecnicaName, setSchedaTecnicaName] = useState<string | null>(null)
+  const [uploadingSchedaTecnica, setUploadingSchedaTecnica] = useState(false)
+  const [msdsUrl, setMsdsUrl] = useState<string | null>(null)
+  const [msdsName, setMsdsName] = useState<string | null>(null)
+  const [uploadingMsds, setUploadingMsds] = useState(false)
+  const [tipoAnalisi, setTipoAnalisi] = useState<TipoAnalisi | ''>('')
+  const [prodottoDaComparare, setProdottoDaComparare] = useState('')
+  const [descrizioneRichiesteAnalisi, setDescrizioneRichiesteAnalisi] = useState('')
+  const [prossimiPassiAnalisi, setProssimiPassiAnalisi] = useState('')
+  const [prossimiPassiDataAnalisi, setProssimiPassiDataAnalisi] = useState('')
+  const [urgenzaAnalisi, setUrgenzaAnalisi] = useState<Urgenza | ''>('')
+  const [richiestoDaAnalisi, setRichiestoDaAnalisi] = useState('')
+
   const [assignments, setAssignments] = useState<PendingAssignment[]>([])
   const [saving, setSaving] = useState(false)
 
   const isReclamo = activityTag === 'RECLAMO FORNITORE' || activityTag === 'RECLAMO CLIENTE'
+  const isRichiestaAnalisiFornitore = activityTag === 'RICHIESTA ANALISI CAMPIONE FORNITORE'
 
   function toggleReparto(r: string) {
     setReparti((cur) => (cur.includes(r) ? cur.filter((x) => x !== r) : [...cur, r]))
@@ -990,9 +1048,47 @@ function NewProcurementActivityForm({
     setAttachmentName(file.name)
   }
 
+  // Due allegati distinti per la richiesta analisi campione (scheda tecnica
+  // e MSDS): stesso bucket "procurement-attachments" degli altri allegati,
+  // solo due handler separati così restano due file indipendenti invece di
+  // uno che sovrascrive l'altro.
+  async function handleSchedaTecnicaChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingSchedaTecnica(true)
+    const path = `scheda-tecnica-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+    const { error } = await supabase.storage.from('procurement-attachments').upload(path, file, { upsert: true })
+    setUploadingSchedaTecnica(false)
+    e.target.value = ''
+    if (error) {
+      alert('Non è stato possibile caricare la scheda tecnica: ' + error.message)
+      return
+    }
+    const { data } = supabase.storage.from('procurement-attachments').getPublicUrl(path)
+    setSchedaTecnicaUrl(data.publicUrl)
+    setSchedaTecnicaName(file.name)
+  }
+
+  async function handleMsdsChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setUploadingMsds(true)
+    const path = `msds-${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+    const { error } = await supabase.storage.from('procurement-attachments').upload(path, file, { upsert: true })
+    setUploadingMsds(false)
+    e.target.value = ''
+    if (error) {
+      alert('Non è stato possibile caricare la MSDS: ' + error.message)
+      return
+    }
+    const { data } = supabase.storage.from('procurement-attachments').getPublicUrl(path)
+    setMsdsUrl(data.publicUrl)
+    setMsdsName(file.name)
+  }
+
   function validate(): string | null {
     if (!activityTag) return 'Seleziona il tipo di attività.'
-    if (activityTag === 'VISITA FORNITORE' || activityTag === 'RECLAMO FORNITORE') {
+    if (activityTag === 'VISITA FORNITORE' || activityTag === 'RECLAMO FORNITORE' || isRichiestaAnalisiFornitore) {
       if (!supplierId) return 'Seleziona il fornitore.'
       if (usingManualSupplier && !manualSupplierName.trim()) return 'Inserisci il nome del nuovo fornitore.'
     }
@@ -1010,6 +1106,15 @@ function NewProcurementActivityForm({
     if (activityTag === 'RIUNIONE INTERNA') {
       if (reparti.length === 0 || !personePresenti.trim() || !temiTrattatiRiunione.trim()) {
         return 'Compila reparti coinvolti, persone presenti e temi trattati.'
+      }
+    }
+    if (isRichiestaAnalisiFornitore) {
+      if (!descrizioneProdottoAnalisi.trim() || !tipoAnalisi || !prossimiPassiAnalisi.trim() || !urgenzaAnalisi || !richiestoDaAnalisi) {
+        return 'Compila descrizione prodotto, descrizione analisi, prossimi passi, urgenza e da chi è stata richiesta.'
+      }
+      if (tipoAnalisi === 'comparativa' && !prodottoDaComparare.trim()) return 'Indica il prodotto da comparare.'
+      if (tipoAnalisi === 'nuovo_prodotto' && !descrizioneRichiesteAnalisi.trim()) {
+        return 'Indica la descrizione delle richieste di analisi.'
       }
     }
     for (const a of assignments) {
@@ -1120,6 +1225,25 @@ function NewProcurementActivityForm({
         persone_presenti: personePresenti.trim(),
         temi_trattati: temiTrattatiRiunione.trim(),
       }
+    } else if (isRichiestaAnalisiFornitore) {
+      supplierIdToSave = resolvedSupplierId
+      activityDetails = {
+        tag: 'RICHIESTA ANALISI CAMPIONE FORNITORE',
+        descrizione_prodotto: descrizioneProdottoAnalisi.trim(),
+        scheda_tecnica_url: schedaTecnicaUrl,
+        scheda_tecnica_name: schedaTecnicaName,
+        msds_url: msdsUrl,
+        msds_name: msdsName,
+        tipo_analisi: tipoAnalisi,
+        prodotto_da_comparare: prodottoDaComparare.trim(),
+        descrizione_richieste_analisi: descrizioneRichiesteAnalisi.trim(),
+        prossimi_passi: prossimiPassiAnalisi.trim(),
+        prossimi_passi_data: prossimiPassiDataAnalisi,
+        urgenza: urgenzaAnalisi,
+        richiesto_da: richiestoDaAnalisi,
+      }
+      reclamoPriority = urgenzaAnalisi || undefined
+      subjectLabel = `${activityTag} — ${resolvedSupplierName}`
     }
 
     const { data: newActivity, error } = await supabase
@@ -1173,7 +1297,7 @@ function NewProcurementActivityForm({
         </select>
       </div>
 
-      {(activityTag === 'VISITA FORNITORE' || activityTag === 'RECLAMO FORNITORE') && (
+      {(activityTag === 'VISITA FORNITORE' || activityTag === 'RECLAMO FORNITORE' || isRichiestaAnalisiFornitore) && (
         <>
           <div className="field-row">
             <label className="field-label">Fornitore</label>
@@ -1431,6 +1555,114 @@ function NewProcurementActivityForm({
             <textarea value={temiTrattatiRiunione} onChange={(e) => setTemiTrattatiRiunione(e.target.value)} required />
           </div>
           <ActivityAssignment profiles={assignees} assignments={assignments} onChange={setAssignments} />
+        </div>
+      )}
+
+      {isRichiestaAnalisiFornitore && (
+        <div className="activity-fields-block">
+          <span className="activity-fields-title">Richiesta analisi campione fornitore</span>
+          <div className="field-row">
+            <label className="field-label">Descrizione prodotto</label>
+            <textarea value={descrizioneProdottoAnalisi} onChange={(e) => setDescrizioneProdottoAnalisi(e.target.value)} required />
+          </div>
+
+          <div className="field-row-2">
+            <div className="field-row">
+              <label className="field-label">Schede tecniche (facoltativo)</label>
+              {schedaTecnicaUrl ? (
+                <div className="marketing-attachment-row">
+                  <a href={schedaTecnicaUrl} target="_blank" rel="noreferrer">📎 {schedaTecnicaName}</a>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => { setSchedaTecnicaUrl(null); setSchedaTecnicaName(null) }}
+                  >
+                    Rimuovi
+                  </button>
+                </div>
+              ) : (
+                <input type="file" onChange={handleSchedaTecnicaChange} disabled={uploadingSchedaTecnica} />
+              )}
+              {uploadingSchedaTecnica && <span className="muted">Caricamento…</span>}
+            </div>
+            <div className="field-row">
+              <label className="field-label">MSDS (facoltativo)</label>
+              {msdsUrl ? (
+                <div className="marketing-attachment-row">
+                  <a href={msdsUrl} target="_blank" rel="noreferrer">📎 {msdsName}</a>
+                  <button type="button" className="btn btn-ghost" onClick={() => { setMsdsUrl(null); setMsdsName(null) }}>
+                    Rimuovi
+                  </button>
+                </div>
+              ) : (
+                <input type="file" onChange={handleMsdsChange} disabled={uploadingMsds} />
+              )}
+              {uploadingMsds && <span className="muted">Caricamento…</span>}
+            </div>
+          </div>
+
+          <div className="field-row">
+            <label className="field-label">Descrizione analisi</label>
+            <select value={tipoAnalisi} onChange={(e) => setTipoAnalisi(e.target.value as TipoAnalisi)} required>
+              <option value="">— Seleziona —</option>
+              {TIPO_ANALISI_OPTIONS_FORNITORE.map((t) => (
+                <option key={t} value={t}>
+                  {TIPO_ANALISI_LABELS[t]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {tipoAnalisi === 'comparativa' && (
+            <div className="field-row">
+              <label className="field-label">Prodotto da comparare</label>
+              <input value={prodottoDaComparare} onChange={(e) => setProdottoDaComparare(e.target.value)} required />
+            </div>
+          )}
+          {tipoAnalisi === 'nuovo_prodotto' && (
+            <div className="field-row">
+              <label className="field-label">Descrizione richieste analisi</label>
+              <textarea value={descrizioneRichiesteAnalisi} onChange={(e) => setDescrizioneRichiesteAnalisi(e.target.value)} required />
+            </div>
+          )}
+
+          <div className="field-row-2">
+            <div className="field-row">
+              <label className="field-label">Prossimi passi</label>
+              <textarea value={prossimiPassiAnalisi} onChange={(e) => setProssimiPassiAnalisi(e.target.value)} required />
+            </div>
+            <div className="field-row">
+              <label className="field-label">Data prossimi passi (facoltativa)</label>
+              <input type="date" value={prossimiPassiDataAnalisi} onChange={(e) => setProssimiPassiDataAnalisi(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="field-row">
+            <label className="field-label">Urgenza</label>
+            <select value={urgenzaAnalisi} onChange={(e) => setUrgenzaAnalisi(e.target.value as Urgenza)} required>
+              <option value="">— Seleziona —</option>
+              {URGENZA_OPTIONS.map((u) => (
+                <option key={u} value={u}>
+                  {URGENZA_LABELS[u]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field-row">
+            <label className="field-label">Richiesta da</label>
+            <select value={richiestoDaAnalisi} onChange={(e) => setRichiestoDaAnalisi(e.target.value)} required>
+              <option value="">— Seleziona —</option>
+              {assignees.map((p) => (
+                <option key={p.id} value={p.full_name}>
+                  {p.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <ActivityAssignment profiles={assignees} assignments={assignments} onChange={setAssignments} />
+          <p className="muted">L'attività verrà girata al laboratorio Ricerca&Sviluppo tramite l'assegnazione sopra.</p>
         </div>
       )}
 
