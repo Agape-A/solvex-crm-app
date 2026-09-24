@@ -1,0 +1,8 @@
+node_modules
+dist
+.env
+.env.save
+.env.local
+.DS_Store
+tsconfig.tsbuildinfo
+_to_delete
