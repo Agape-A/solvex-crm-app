@@ -733,3 +733,27 @@ a.client-deal-row:hover { background: var(--surface-2); border-radius: 6px; }
   top: 2px;
   right: 6px;
 }
+
+/* Report — tabella "Per persona" (trattative/richieste per collega) */
+.report-people-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.report-people-table th,
+.report-people-table td {
+  padding: 8px 10px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+.report-people-table thead th {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: var(--ink-3);
+  font-weight: 600;
+}
+.report-people-table td.num,
+.report-people-table th[scope="col"]:not(:first-child) {
+  text-align: right;
+}
+.report-people-table tbody tr:last-child td,
+.report-people-table tbody tr:last-child th {
+  border-bottom: none;
+}
