@@ -226,15 +226,17 @@ a.tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border
   background: var(--bg); padding: 6px 8px; font-family: inherit;
 }
 .new-deal-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; max-width: 480px; }
-.field-row { display: flex; flex-direction: column; gap: 4px; }
-.field-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.field-row { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.field-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; min-width: 0; }
 .field-row input, .field-row select, .field-row textarea {
   padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg);
+  width: 100%; max-width: 100%; box-sizing: border-box;
 }
+.field-row input[type="file"] { padding: 6px 8px; }
 .field-checkbox { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--ink-2); }
 .new-client-block, .activity-fields-block {
   display: flex; flex-direction: column; gap: 10px; padding: 10px 12px; border-radius: 10px;
-  border: 1px solid var(--border); background: var(--accent-soft);
+  border: 1px solid var(--border); background: var(--accent-soft); min-width: 0;
 }
 .activity-fields-title {
   font-size: 12px; font-weight: 700; color: var(--ink-2); text-transform: uppercase; letter-spacing: .03em;
@@ -602,7 +604,8 @@ a.client-deal-row:hover { background: var(--surface-2); border-radius: 6px; }
 .marketing-campaign-main { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 200px; }
 .marketing-campaign-actions { display: flex; gap: 6px; }
 .marketing-campaign-body { min-height: 100px; }
-.marketing-attachment-row { display: flex; align-items: center; gap: 10px; }
+.marketing-attachment-row { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.marketing-attachment-row a { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 
 /* ---- importazione clienti ---- */
 .import-panel { display: flex; flex-direction: column; gap: 12px; margin-bottom: 16px; max-width: 640px; }
@@ -710,6 +713,7 @@ a.client-deal-row:hover { background: var(--surface-2); border-radius: 6px; }
   .client-row { grid-template-columns: 1fr; }
   .import-map-grid { grid-template-columns: 1fr; }
   .view-head { flex-wrap: wrap; gap: 10px; }
+  .field-row-2 { grid-template-columns: 1fr; }
 }
 
 /* Pallino di notifica nel menu laterale (Chat, Richieste) */
