@@ -128,6 +128,27 @@ export function PurchasePipeline() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canAccess])
 
+  // Notifiche "live": se arriva una nuova richiesta acquisti o un'altra
+  // persona ne cambia lo stato, la bacheca (e i pallini sulle colonne/righe
+  // qui sotto) si aggiornano subito, senza dover ricaricare la pagina —
+  // richiesto da Andrea (set 2026), stesso canale già usato per il pallino
+  // sulla casella "Richieste" del menu (vedi AuthContext.tsx).
+  useEffect(() => {
+    if (!canAccess) return
+    const channel = supabase
+      .channel('acquisti_requests_live')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'requests', filter: 'department=eq.acquisti' },
+        () => loadAcquistiRequests(),
+      )
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canAccess])
+
   // Deep-link (es. dalla scheda di un fornitore) — evidenzia e scorre fino
   // alla richiesta indicata.
   useEffect(() => {
@@ -221,7 +242,12 @@ export function PurchasePipeline() {
               <div key={status} className="kanban-col">
                 <div className="kanban-col-head">
                   <span>
-                    {ACQUISTI_REQUEST_STATUS_LABELS[status]} <span className="muted">· {rows.length}</span>
+                    {ACQUISTI_REQUEST_STATUS_LABELS[status]}
+                    {(status === 'nuova' || status === 'lavorazione') && rows.length > 0 ? (
+                      <span className="stage-btn-notify">{rows.length > 99 ? '99+' : rows.length}</span>
+                    ) : (
+                      <span className="muted"> · {rows.length}</span>
+                    )}
                   </span>
                 </div>
                 <div className="kanban-cards">
@@ -275,7 +301,10 @@ function AcquistiRequestCard({
       className={'card kanban-card' + (highlighted ? ' kanban-card-highlighted' : '')}
     >
       <div className="kanban-card-main">
-        <strong>{request.subject}</strong>
+        <strong>
+          {(request.status === 'nuova' || request.status === 'lavorazione') && <span className="row-notify-dot" />}
+          {request.subject}
+        </strong>
         {supplierName && !request.subject.includes(supplierName) && <span className="muted">{supplierName}</span>}
       </div>
 

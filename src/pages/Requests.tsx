@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { useAuth } from '../context/AuthContext'
 import { CommentThread } from '../components/CommentThread'
 import { RefPicker } from '../components/RefPicker'
 import { describeRef, refLinkPath, type RequestRefTable } from '../lib/refRecords'
@@ -25,6 +26,7 @@ const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
 }
 
 export function Requests() {
+  const { profile } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [requests, setRequests] = useState<Request[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
@@ -79,6 +81,22 @@ export function Requests() {
     loadRequests()
     loadProfiles()
     loadClients()
+  }, [])
+
+  // Notifiche "live": se arriva una nuova richiesta o un'altra persona ne
+  // cambia lo stato, l'elenco (e i pallini sui filtri/righe qui sotto) si
+  // aggiornano subito, senza dover ricaricare la pagina — richiesto da
+  // Andrea (set 2026), stesso canale già usato per il pallino sulla casella
+  // "Richieste" del menu (vedi AuthContext.tsx).
+  useEffect(() => {
+    const channel = supabase
+      .channel('requests_page_live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'requests' }, () => loadRequests())
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Un link "da fuori" (dal Calendario, dalla ricerca, da un'altra pagina)
@@ -145,6 +163,7 @@ export function Requests() {
         <NewRequestForm
           profiles={profiles}
           clients={clients}
+          senderName={profile?.full_name ?? ''}
           onCreated={() => {
             setShowForm(false)
             loadRequests()
@@ -159,7 +178,12 @@ export function Requests() {
             className={'stage-btn' + (statusFilter === s ? ' current' : '')}
             onClick={() => setStatusFilter(s)}
           >
-            {STATUS_FILTER_LABELS[s]} <span className="muted">· {statusCounts[s]}</span>
+            {STATUS_FILTER_LABELS[s]}
+            {(s === 'nuova' || s === 'lavorazione') && statusCounts[s] > 0 ? (
+              <span className="stage-btn-notify">{statusCounts[s] > 99 ? '99+' : statusCounts[s]}</span>
+            ) : (
+              <span className="muted"> · {statusCounts[s]}</span>
+            )}
           </button>
         ))}
       </div>
@@ -181,7 +205,10 @@ export function Requests() {
               onClick={() => setSelected(r)}
             >
               <div className="req-main">
-                <div className="req-subject">{r.subject}</div>
+                <div className="req-subject">
+                  {(r.status === 'nuova' || r.status === 'lavorazione') && <span className="row-notify-dot" />}
+                  {r.subject}
+                </div>
                 <div className="req-meta">
                   {r.sender} · {r.type === 'interna' ? 'Interna' : 'Esterna'} ·{' '}
                   {new Date(r.created_at).toLocaleDateString('it-IT')}
@@ -269,14 +296,15 @@ export function Requests() {
 function NewRequestForm({
   profiles,
   clients,
+  senderName,
   onCreated,
 }: {
   profiles: Profile[]
   clients: Client[]
+  senderName: string
   onCreated: () => void
 }) {
   const [subject, setSubject] = useState('')
-  const [sender, setSender] = useState('')
   const [clientId, setClientId] = useState('')
   const [department, setDepartment] = useState<RequestDepartment>('commerciale')
   const [priority, setPriority] = useState<RequestPriority>('media')
@@ -294,7 +322,7 @@ function NewRequestForm({
     setSaving(true)
     const { error } = await supabase.from('requests').insert({
       subject,
-      sender,
+      sender: senderName,
       client_id: clientId || null,
       ref_table: refTable || null,
       ref_id: refTable ? refId || null : null,
@@ -322,7 +350,7 @@ function NewRequestForm({
       </div>
       <div className="field-row">
         <label className="field-label">Mittente</label>
-        <input value={sender} onChange={(e) => setSender(e.target.value)} required />
+        <input value={senderName} disabled />
       </div>
       {clients.length > 0 && (
         <div className="field-row">

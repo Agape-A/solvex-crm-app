@@ -34,6 +34,10 @@ export function Dashboard() {
   // competenza), ma vede comunque il calendario appuntamenti — vedi anche
   // Calendar.tsx, canSeeAppointments.
   const canSeeAppointments = canSeePipeline || profile?.role === 'ufficio_acquisti'
+  // La casella "Trattative aperte" non riguarda l'ufficio acquisti (segue
+  // le richieste/attività fornitore, non le trattative clienti) — su
+  // richiesta di Andrea sparisce dalla sua dashboard.
+  const showDealsTile = profile?.role !== 'ufficio_acquisti'
 
   useEffect(() => {
     // Il conteggio rispecchia solo ciò che la RLS permette di vedere al ruolo
@@ -110,10 +114,12 @@ export function Dashboard() {
       </div>
 
       <div className="tile-row">
-        <Link to="/pipeline" className="card tile">
-          <div className="tile-label">Trattative aperte</div>
-          <div className="tile-value">{dealsOpen ?? '—'}</div>
-        </Link>
+        {showDealsTile && (
+          <Link to="/pipeline" className="card tile">
+            <div className="tile-label">Trattative aperte</div>
+            <div className="tile-value">{dealsOpen ?? '—'}</div>
+          </Link>
+        )}
         <Link to="/richieste" className="card tile">
           <div className="tile-label">Richieste aperte</div>
           <div className="tile-value">{requestsOpen ?? '—'}</div>
