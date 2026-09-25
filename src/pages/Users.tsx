@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { ALL_ROLES, hasFullAccess, ROLE_LABELS, type Profile, type UserRole } from '../lib/types'
+import { ALL_ROLES, REQUEST_DEPARTMENTS, ROLE_LABELS, type Profile, type RequestDepartment, type UserRole } from '../lib/types'
 
 // Pagina "Utenti", riservata alla direzione: qui si corregge il nome e il
 // ruolo di chi è già stato invitato. Creare un nuovo account resta un
@@ -10,16 +10,23 @@ import { ALL_ROLES, hasFullAccess, ROLE_LABELS, type Profile, type UserRole } fr
 // — vedi le istruzioni mandate a parte. Una volta che la persona esiste,
 // compare qui con il ruolo di default "Operatore" e va corretta.
 
-function UserRow({ user, onSave }: { user: Profile; onSave: (patch: { full_name: string; role: UserRole }) => Promise<void> }) {
+function UserRow({
+  user,
+  onSave,
+}: {
+  user: Profile
+  onSave: (patch: { full_name: string; role: UserRole; department: RequestDepartment | null }) => Promise<void>
+}) {
   const [fullName, setFullName] = useState(user.full_name)
   const [role, setRole] = useState<UserRole>(user.role)
+  const [department, setDepartment] = useState<RequestDepartment | ''>(user.department ?? '')
   const [saving, setSaving] = useState(false)
 
-  const dirty = fullName !== user.full_name || role !== user.role
+  const dirty = fullName !== user.full_name || role !== user.role || (department || null) !== user.department
 
   async function handleSave() {
     setSaving(true)
-    await onSave({ full_name: fullName, role })
+    await onSave({ full_name: fullName, role, department: department || null })
     setSaving(false)
   }
 
@@ -35,6 +42,14 @@ function UserRow({ user, onSave }: { user: Profile; onSave: (patch: { full_name:
           {ALL_ROLES.map((r) => (
             <option key={r} value={r}>
               {ROLE_LABELS[r]}
+            </option>
+          ))}
+        </select>
+        <select value={department} onChange={(e) => setDepartment(e.target.value as RequestDepartment | '')} title="Reparto (per l'assegnazione delle richieste)">
+          <option value="">— Nessun reparto —</option>
+          {REQUEST_DEPARTMENTS.map((d) => (
+            <option key={d} value={d}>
+              {d}
             </option>
           ))}
         </select>
@@ -61,7 +76,7 @@ export function Users() {
     load()
   }, [])
 
-  async function saveUser(userId: string, patch: { full_name: string; role: UserRole }) {
+  async function saveUser(userId: string, patch: { full_name: string; role: UserRole; department: RequestDepartment | null }) {
     const { error } = await supabase.from('profiles').update(patch).eq('id', userId)
     if (error) {
       alert("Non è stato possibile salvare le modifiche: " + error.message)
@@ -70,7 +85,7 @@ export function Users() {
     await load()
   }
 
-  if (!hasFullAccess(profile?.role)) {
+  if (profile?.role !== 'dirigente') {
     return (
       <div className="view">
         <p className="muted">Questa pagina è riservata alla direzione.</p>

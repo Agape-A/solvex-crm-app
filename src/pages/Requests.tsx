@@ -7,7 +7,7 @@ import { describeRef, refLinkPath, type RequestRefTable } from '../lib/refRecord
 import { type Client, type Profile, type Request, type RequestDepartment, type RequestPriority, type RequestStatus } from '../lib/types'
 
 const STATUSES: RequestStatus[] = ['nuova', 'lavorazione', 'risolta']
-const DEPARTMENTS: RequestDepartment[] = ['commerciale', 'tecnico', 'operativo', 'amministrazione']
+const DEPARTMENTS: RequestDepartment[] = ['commerciale', 'tecnico', 'operativo', 'amministrazione', 'acquisti']
 const PRIORITIES: RequestPriority[] = ['alta', 'media', 'bassa']
 
 // Filtro per stato in testata, come una scheda separata per ciascuno stato:

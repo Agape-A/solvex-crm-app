@@ -3,21 +3,14 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { OwnGoalsPanel } from '../components/GoalsPanel'
 import {
-  APPOINTMENT_TYPE_LABELS,
   CLIENT_TYPE_LABELS,
   DEAL_STAGES,
-  hasFullAccess,
-  MARKETING_SOURCE_LABELS,
   PURCHASE_STATUSES,
   RESEARCH_STATUS_LABELS,
   type AnnualTarget,
-  type Appointment,
-  type AppointmentType,
   type Client,
   type ClientType,
   type Deal,
-  type MarketingCampaign,
-  type MarketingContact,
   type ProcurementActivity,
   type Profile,
   type PurchaseRequest,
@@ -36,8 +29,9 @@ const STATUS_COLOR: Record<string, string> = {
 }
 
 const currency = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
-const DEPARTMENTS = ['commerciale', 'tecnico', 'operativo', 'amministrazione'] as const
-const ACTIVITY_TAGS = ['VISITA FORNITORE', 'RECLAMO FORNITORE', 'RECLAMO CLIENTE', 'RIUNIONE INTERNA'] as const
+const DEPARTMENTS = ['commerciale', 'tecnico', 'operativo', 'amministrazione', 'acquisti'] as const
+// "Reclamo Cliente" tolto dal 2026, non più tra le attività Acquisti proponibili — vedi PurchasePipeline.tsx.
+const ACTIVITY_TAGS = ['INCONTRO FORNITORE', 'RICHIESTA ANALISI CAMPIONE FORNITORE', 'RECLAMO FORNITORE', 'RIUNIONE INTERNA'] as const
 
 interface BarRow {
   label: string
@@ -204,9 +198,6 @@ export function Report() {
   const [deals, setDeals] = useState<Deal[]>([])
   const [requests, setRequests] = useState<Request[]>([])
   const [clients, setClients] = useState<Client[]>([])
-  const [appointments, setAppointments] = useState<Appointment[]>([])
-  const [marketingContacts, setMarketingContacts] = useState<MarketingContact[]>([])
-  const [marketingCampaigns, setMarketingCampaigns] = useState<MarketingCampaign[]>([])
   const [research, setResearch] = useState<ResearchRecord[]>([])
   const [purchaseRequests, setPurchaseRequests] = useState<PurchaseRequest[]>([])
   const [procurementActivities, setProcurementActivities] = useState<ProcurementActivity[]>([])
@@ -220,11 +211,10 @@ export function Report() {
   // stesse regole delle pagine dedicate (Pipeline, Ricerca&Sviluppo, Acquisti,
   // vedi 0013_moduli_ruoli.sql). La RLS impedirebbe comunque la lettura a chi
   // non ha il ruolo giusto: qui evitiamo solo la query inutile.
-  const canSeeCommerciale = profile ? ['tecnico', 'commerciale', 'dirigente', 'amministrazione'].includes(profile.role) : false
-  const canSeeMarketing = profile ? ['tecnico', 'commerciale', 'dirigente', 'amministrazione'].includes(profile.role) : false
-  const canSeeResearch = profile ? ['dottore_laboratorio', 'dirigente', 'amministrazione'].includes(profile.role) : false
-  const canSeeAcquisti = profile ? ['ufficio_acquisti', 'dirigente', 'amministrazione'].includes(profile.role) : false
-  const isDirigente = hasFullAccess(profile?.role)
+  const canSeeCommerciale = profile ? ['tecnico', 'commerciale', 'dirigente'].includes(profile.role) : false
+  const canSeeResearch = profile ? ['dottore_laboratorio', 'dirigente'].includes(profile.role) : false
+  const canSeeAcquisti = profile ? ['ufficio_acquisti', 'dirigente'].includes(profile.role) : false
+  const isDirigente = profile?.role === 'dirigente'
 
   async function reloadTargets() {
     const { data } = await supabase.from('annual_targets').select('*')
@@ -234,32 +224,11 @@ export function Report() {
   useEffect(() => {
     async function load() {
       setLoading(true)
-      const [
-        dealsRes,
-        requestsRes,
-        clientsRes,
-        appointmentsRes,
-        marketingContactsRes,
-        marketingCampaignsRes,
-        researchRes,
-        purchaseRes,
-        activitiesRes,
-        suppliersRes,
-        profilesRes,
-        targetsRes,
-      ] = await Promise.all([
+      const [dealsRes, requestsRes, clientsRes, researchRes, purchaseRes, activitiesRes, suppliersRes, profilesRes, targetsRes] =
+        await Promise.all([
           canSeeCommerciale ? supabase.from('deals').select('*') : Promise.resolve({ data: [] as Deal[], error: null }),
           supabase.from('requests').select('*'),
           canSeeCommerciale ? supabase.from('clients').select('*') : Promise.resolve({ data: [] as Client[], error: null }),
-          canSeeCommerciale
-            ? supabase.from('appointments').select('*')
-            : Promise.resolve({ data: [] as Appointment[], error: null }),
-          canSeeMarketing
-            ? supabase.from('marketing_contacts').select('*')
-            : Promise.resolve({ data: [] as MarketingContact[], error: null }),
-          canSeeMarketing
-            ? supabase.from('marketing_campaigns').select('*')
-            : Promise.resolve({ data: [] as MarketingCampaign[], error: null }),
           canSeeResearch
             ? supabase.from('research_records').select('*')
             : Promise.resolve({ data: [] as ResearchRecord[], error: null }),
@@ -276,9 +245,6 @@ export function Report() {
       setDeals((dealsRes.data as Deal[]) ?? [])
       setRequests((requestsRes.data as Request[]) ?? [])
       setClients((clientsRes.data as Client[]) ?? [])
-      setAppointments((appointmentsRes.data as Appointment[]) ?? [])
-      setMarketingContacts((marketingContactsRes.data as MarketingContact[]) ?? [])
-      setMarketingCampaigns((marketingCampaignsRes.data as MarketingCampaign[]) ?? [])
       setResearch((researchRes.data as ResearchRecord[]) ?? [])
       setPurchaseRequests((purchaseRes.data as PurchaseRequest[]) ?? [])
       setProcurementActivities((activitiesRes.data as ProcurementActivity[]) ?? [])
@@ -288,7 +254,7 @@ export function Report() {
       setLoading(false)
     }
     load()
-  }, [canSeeCommerciale, canSeeMarketing, canSeeResearch, canSeeAcquisti])
+  }, [canSeeCommerciale, canSeeResearch, canSeeAcquisti])
 
   if (!profile) return null
   if (loading) return <div className="view"><p className="muted">Caricamento…</p></div>
@@ -312,7 +278,7 @@ export function Report() {
 
   const perReparto: BarRow[] = DEPARTMENTS.map((dep, i) => {
     const count = requests.filter((r) => r.department === dep).length
-    return { label: dep, value: count, formatted: String(count), color: CATEGORICAL[i] }
+    return { label: dep, value: count, formatted: String(count), color: CATEGORICAL[i % CATEGORICAL.length] }
   })
 
   const perStato: BarRow[] = (['nuova', 'lavorazione', 'risolta'] as const).map((st) => {
@@ -324,7 +290,6 @@ export function Report() {
 
   const pipelineAperta = deals.filter((d) => d.stage !== 'vinto' && d.stage !== 'perso')
   const vinti = deals.filter((d) => d.stage === 'vinto')
-  const persi = deals.filter((d) => d.stage === 'perso')
   const valorePipelineAperta = pipelineAperta.reduce((s, d) => s + Number(d.value_estimate), 0)
   const valoreVinto = vinti.reduce((s, d) => s + Number(d.value_estimate), 0)
 
@@ -377,82 +342,6 @@ export function Report() {
       .reduce((sum, d) => sum + Number(d.value_estimate), 0)
     return { label, value: v, formatted: currency.format(v) }
   })
-
-  // ============ Clienti ============
-
-  const now = new Date()
-  const clientiNuoviMese = clients.filter((c) => {
-    const d = new Date(c.created_at)
-    return d.getFullYear() === now.getFullYear() && d.getMonth() === now.getMonth()
-  }).length
-  const clientiPerTipo: BarRow[] = (['conceria', 'distributore', 'azienda_chimica'] as ClientType[]).map((ct, i) => {
-    const count = clients.filter((c) => c.client_type === ct).length
-    return { label: CLIENT_TYPE_LABELS[ct], value: count, formatted: String(count), color: CATEGORICAL[i] }
-  })
-
-  // ============ Marketing ============
-
-  const consensiAttivi = marketingContacts.filter((c) => c.consent_marketing && !c.unsubscribed_at).length
-  const campagnePronte = marketingCampaigns.filter((c) => c.status === 'pronta').length
-  const contattiPerFonte: BarRow[] = (Object.keys(MARKETING_SOURCE_LABELS) as (keyof typeof MARKETING_SOURCE_LABELS)[]).map(
-    (src, i) => {
-      const count = marketingContacts.filter((c) => c.source === src).length
-      return {
-        label: MARKETING_SOURCE_LABELS[src],
-        value: count,
-        formatted: String(count),
-        color: CATEGORICAL[i % CATEGORICAL.length],
-      }
-    }
-  )
-
-  // ============ Calendario ============
-  // "Questa settimana" = da oggi a 7 giorni da oggi, non lun-dom di calendario:
-  // resta utile qualsiasi giorno della settimana si apra il report.
-
-  const weekStart = new Date()
-  const weekEnd = new Date()
-  weekEnd.setDate(weekEnd.getDate() + 7)
-  const appuntamentiSettimana = appointments.filter((a) => {
-    const d = new Date(a.appointment_at)
-    return d >= weekStart && d <= weekEnd
-  }).length
-  const appuntamentiPerTipo: BarRow[] = (Object.keys(APPOINTMENT_TYPE_LABELS) as AppointmentType[]).map((t, i) => {
-    const count = appointments.filter((a) => a.type === t).length
-    return {
-      label: APPOINTMENT_TYPE_LABELS[t],
-      value: count,
-      formatted: String(count),
-      color: CATEGORICAL[i % CATEGORICAL.length],
-    }
-  })
-
-  // ============ Per persona (solo direzione) ============
-  // Trattative vinte/perse per chi le possiede, richieste risolte/aperte per
-  // chi ce l'ha assegnata: non sostituisce gli Obiettivi annuali (quelli sono
-  // target scelti dalla direzione) — è la fotografia di cosa è successo
-  // davvero finora. Chi non ha ancora nessuna di queste attività non compare,
-  // per non riempire la tabella di righe tutte a zero.
-
-  interface PersonRow {
-    id: string
-    name: string
-    trattativeVinte: number
-    trattativePerse: number
-    richiesteRisolte: number
-    richiesteAperteAssegnate: number
-  }
-  const perPersona: PersonRow[] = profiles
-    .map((p) => ({
-      id: p.id,
-      name: p.full_name,
-      trattativeVinte: deals.filter((d) => d.owner_id === p.id && d.stage === 'vinto').length,
-      trattativePerse: deals.filter((d) => d.owner_id === p.id && d.stage === 'perso').length,
-      richiesteRisolte: requests.filter((r) => r.assignee_id === p.id && r.status === 'risolta').length,
-      richiesteAperteAssegnate: requests.filter((r) => r.assignee_id === p.id && r.status !== 'risolta').length,
-    }))
-    .filter((p) => p.trattativeVinte + p.trattativePerse + p.richiesteRisolte + p.richiesteAperteAssegnate > 0)
-    .sort((a, b) => b.trattativeVinte - a.trattativeVinte || a.name.localeCompare(b.name))
 
   // ============ Ricerca&Sviluppo ============
 
@@ -529,14 +418,10 @@ export function Report() {
       {isDirigente && (
         <>
           <div className="section-title">Direzione — vista d'insieme</div>
-          <div className="tile-row tile-row-5">
+          <div className="tile-row tile-row-4">
             <div className="card tile">
-              <div className="tile-label">Trattative vinte</div>
-              <div className="tile-value">{vinti.length}</div>
-            </div>
-            <div className="card tile">
-              <div className="tile-label">Trattative perse</div>
-              <div className="tile-value">{persi.length}</div>
+              <div className="tile-label">Pipeline aperta</div>
+              <div className="tile-value">{currency.format(valorePipelineAperta)}</div>
             </div>
             <div className="card tile">
               <div className="tile-label">Richieste aperte</div>
@@ -550,35 +435,6 @@ export function Report() {
               <div className="tile-label">Acquisti da completare</div>
               <div className="tile-value">{acquistiAperti.length}</div>
             </div>
-          </div>
-
-          <div className="section-title">Per persona</div>
-          <div className="card panel">
-            {perPersona.length === 0 && <p className="muted">Nessuna trattativa o richiesta ancora assegnata a qualcuno.</p>}
-            {perPersona.length > 0 && (
-              <table className="report-people-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Persona</th>
-                    <th scope="col">Trattative vinte</th>
-                    <th scope="col">Trattative perse</th>
-                    <th scope="col">Richieste risolte</th>
-                    <th scope="col">Richieste aperte assegnate</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {perPersona.map((p) => (
-                    <tr key={p.id}>
-                      <th scope="row">{p.name}</th>
-                      <td className="num">{p.trattativeVinte}</td>
-                      <td className="num">{p.trattativePerse}</td>
-                      <td className="num">{p.richiesteRisolte}</td>
-                      <td className="num">{p.richiesteAperteAssegnate}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
           </div>
 
           <div className="view-head report-section-head">
@@ -673,78 +529,6 @@ export function Report() {
             <div className="card panel">
               <div className="section-title">Chiuso vinto, ultimi 6 mesi</div>
               <BarList rows={vintiPerMese} tableCaption="Valore delle trattative chiuse vinte, per mese" />
-            </div>
-          </div>
-        </>
-      )}
-
-      {canSeeCommerciale && (
-        <>
-          <div className="view-head report-section-head">
-            <h2>Clienti</h2>
-          </div>
-          <div className="tile-row">
-            <div className="card tile">
-              <div className="tile-label">Clienti totali</div>
-              <div className="tile-value">{clients.length}</div>
-            </div>
-            <div className="card tile">
-              <div className="tile-label">Nuovi questo mese</div>
-              <div className="tile-value">{clientiNuoviMese}</div>
-            </div>
-          </div>
-          <div className="chart-grid">
-            <div className="card panel">
-              <div className="section-title">Clienti per tipo</div>
-              <BarList rows={clientiPerTipo} tableCaption="Numero di clienti per tipo" />
-            </div>
-          </div>
-
-          <div className="view-head report-section-head">
-            <h2>Calendario</h2>
-          </div>
-          <div className="tile-row">
-            <div className="card tile">
-              <div className="tile-label">Appuntamenti nei prossimi 7 giorni</div>
-              <div className="tile-value">{appuntamentiSettimana}</div>
-            </div>
-            <div className="card tile">
-              <div className="tile-label">Appuntamenti totali in agenda</div>
-              <div className="tile-value">{appointments.length}</div>
-            </div>
-          </div>
-          <div className="chart-grid">
-            <div className="card panel">
-              <div className="section-title">Appuntamenti per tipo</div>
-              <BarList rows={appuntamentiPerTipo} tableCaption="Numero di appuntamenti per tipo" />
-            </div>
-          </div>
-        </>
-      )}
-
-      {canSeeMarketing && (
-        <>
-          <div className="view-head report-section-head">
-            <h2>Marketing</h2>
-          </div>
-          <div className="tile-row">
-            <div className="card tile">
-              <div className="tile-label">Contatti totali</div>
-              <div className="tile-value">{marketingContacts.length}</div>
-            </div>
-            <div className="card tile">
-              <div className="tile-label">Consensi attivi</div>
-              <div className="tile-value">{consensiAttivi}</div>
-            </div>
-            <div className="card tile">
-              <div className="tile-label">Campagne pronte</div>
-              <div className="tile-value">{campagnePronte}</div>
-            </div>
-          </div>
-          <div className="chart-grid">
-            <div className="card panel">
-              <div className="section-title">Contatti per fonte</div>
-              <BarList rows={contattiPerFonte} tableCaption="Numero di contatti marketing per fonte" />
             </div>
           </div>
         </>
