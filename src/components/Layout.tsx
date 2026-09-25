@@ -33,8 +33,9 @@ import {
 //   dottore_laboratorio (Ricerca&Sviluppo) → solo le proprie Richieste
 //     (quelle assegnate a lui/lei), la pagina Ricerca&Sviluppo, Calendario
 //     (solo le proprie scadenze/appuntamenti).
-//   ufficio_acquisti → Pipeline acquisti, Fornitori, Calendario (idem, solo
-//     proprio).
+//   ufficio_acquisti → Pipeline acquisti, Fornitori, Richieste (le proprie
+//     e quelle del reparto "acquisti" — vedi 0030_richieste_calendario_acquisti.sql),
+//     Calendario (idem, solo proprio).
 // Dashboard e Chat restano visibili a chiunque sia autenticato.
 // "badgeKey" facoltativo: mostra il pallino rosso di notifica preso da
 // useAuth() (vedi AuthContext.tsx e 0029_notifiche_badge.sql).
@@ -47,7 +48,7 @@ const NAV: { to: string; label: string; icon: typeof IconDashboard; roles?: User
     label: 'Richieste',
     icon: IconRequests,
     badgeKey: 'richieste',
-    roles: ['operatore', 'tecnico', 'commerciale', 'dottore_laboratorio'],
+    roles: ['operatore', 'tecnico', 'commerciale', 'dottore_laboratorio', 'ufficio_acquisti'],
   },
   { to: '/ricerche', label: 'Ricerca&Sviluppo', icon: IconResearch, roles: ['dottore_laboratorio'] },
   { to: '/fornitori', label: 'Fornitori', icon: IconSuppliers, roles: ['ufficio_acquisti'] },
