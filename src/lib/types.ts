@@ -14,13 +14,13 @@ export const ROLE_LABELS: Record<UserRole, string> = {
 export const ALL_ROLES: UserRole[] = ['operatore', 'tecnico', 'commerciale', 'dirigente', 'dottore_laboratorio', 'ufficio_acquisti']
 export type DealStage = 'lead' | 'qualificato' | 'proposta' | 'trattativa' | 'vinto' | 'perso'
 export type RequestType = 'interna' | 'esterna'
-export type RequestDepartment = 'commerciale' | 'tecnico' | 'operativo' | 'amministrazione' | 'acquisti'
+export type RequestDepartment = 'commerciale' | 'tecnico' | 'operativo' | 'amministrazione'
 export type RequestPriority = 'alta' | 'media' | 'bassa'
 export type RequestStatus = 'nuova' | 'lavorazione' | 'risolta'
 export type AppointmentType = 'visita_commerciale' | 'sopralluogo_tecnico' | 'altro'
 export type ClientType = 'conceria' | 'distributore' | 'azienda_chimica'
 
-export const REQUEST_DEPARTMENTS: RequestDepartment[] = ['commerciale', 'tecnico', 'operativo', 'amministrazione', 'acquisti']
+export const REQUEST_DEPARTMENTS: RequestDepartment[] = ['commerciale', 'tecnico', 'operativo', 'amministrazione']
 export const REQUEST_PRIORITIES: RequestPriority[] = ['alta', 'media', 'bassa']
 
 export const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
@@ -97,18 +97,6 @@ export const URGENZA_LABELS: Record<Urgenza, string> = {
   alta: 'Alta (in giornata)',
 }
 
-// "Descrizione analisi" per una richiesta di analisi campione. "test_pelle"
-// è pensato per l'eventuale richiesta campione lato cliente (Pipeline
-// clienti) — dal lato fornitore (PurchasePipeline.tsx) si propongono solo
-// "comparativa" e "nuovo_prodotto".
-export type TipoAnalisi = 'comparativa' | 'nuovo_prodotto' | 'test_pelle'
-
-export const TIPO_ANALISI_LABELS: Record<TipoAnalisi, string> = {
-  comparativa: 'Analisi comparativa (vs. prodotto esistente)',
-  nuovo_prodotto: 'Analisi nuovo prodotto',
-  test_pelle: 'Test pelle',
-}
-
 export const REPARTI_RIUNIONE = [
   'Tecnico',
   'Commerciale',
@@ -181,89 +169,30 @@ export interface DealActivityRiunioneInterna {
   temi_trattati: string
 }
 
-// "Richiesta Analisi Campione Cliente" — equivalente lato Pipeline clienti
-// della "Richiesta Analisi Campione Fornitore" della Pipeline acquisti (vedi
-// ProcurementActivityRichiestaAnalisiCampioneFornitore più sotto): stessa
-// idea di scheda tecnica/MSDS allegate e tipo di analisi, con in più
-// "descrizione_analisi_test_pelle"/"metodo_test" per l'opzione "Test pelle",
-// non pertinente lato fornitore. A differenza della versione fornitore, qui
-// "prossimi_passi_data" non fa parte di activity_details: segue lo stesso
-// campo "next_action" del deal già usato dalle altre attività di questa
-// pagina (vedi handleSubmit in Pipeline.tsx).
-export interface DealActivityRichiestaAnalisiCampioneCliente {
-  tag: 'RICHIESTA ANALISI CAMPIONE CLIENTE'
-  descrizione_prodotto: string
-  scheda_tecnica_url: string | null
-  scheda_tecnica_name: string | null
-  msds_url: string | null
-  msds_name: string | null
-  tipo_analisi: TipoAnalisi | ''
-  prodotto_da_comparare: string
-  descrizione_richieste_analisi: string
-  descrizione_analisi_test_pelle: string
-  metodo_test: string
-  prossimi_passi: string
-  urgenza: Urgenza | ''
-  richiesto_da: string
-}
-
 export type DealActivityDetails =
   | DealActivityPrimaVisita
   | DealActivityVisitaCommerciale
   | DealActivityVisitaTecnica
   | DealActivityReclamoCliente
   | DealActivityRiunioneInterna
-  | DealActivityRichiestaAnalisiCampioneCliente
   | null
 
-// ============ Pipeline Acquisti: attività guidate (Incontro Fornitore,
-// Richiesta Analisi Campione, Reclamo Fornitore, Riunione Interna) — stesso
-// principio di deals.activity_details, ma in una tabella a sé
-// (procurement_activities) perché non sono legate a un'opportunità di
-// vendita: vivono in cima alla pagina Acquisti, con un fornitore scelto nel
-// form stesso (non serve aprire prima una scheda specifica), come da
-// "Schema Nuova Pipeline Acquisti" di Andrea (aggiornato set 2026: tolto
-// "Reclamo Cliente" — non pertinente all'ufficio acquisti, resta gestito
-// dalla Pipeline clienti — "Visita Fornitore" rinominata "Incontro
-// Fornitore", aggiunta "Richiesta Analisi Campione").
-//
-// "ProcurementActivityReclamoCliente" resta qui SOLO per continuare a
-// leggere correttamente le attività già registrate con questo tag prima
-// dell'aggiornamento — non è più tra i tipi proponibili dal form (vedi
-// PurchasePipeline.tsx, PROCUREMENT_ACTIVITY_TYPES).
-export interface ProcurementActivityIncontroFornitore {
-  tag: 'INCONTRO FORNITORE'
+// ============ Pipeline Acquisti: attività guidate (Visita Fornitore,
+// Reclamo Fornitore, Reclamo Cliente, Riunione Interna) — stesso principio
+// di deals.activity_details, ma in una tabella a sé (procurement_activities)
+// perché non sono legate a un'opportunità di vendita: vivono in cima alla
+// pagina Acquisti, con un fornitore o un cliente scelto nel form stesso
+// (non serve aprire prima una scheda specifica), come da "Schema Nuova
+// Pipeline Acquisti" di Andrea. Il Reclamo Cliente qui è autonomo, non
+// richiede una trattativa aperta — è un secondo punto d'ingresso rispetto a
+// deals.activity_details, pensato per chi lavora in ufficio acquisti.
+export interface ProcurementActivityVisitaFornitore {
+  tag: 'VISITA FORNITORE'
   incontro: IncontroTipo | ''
   temi_trattati: string
   prodotti_presentati: string
   prossimi_passi: string
   prossimi_passi_data: string
-}
-
-// "Richiesta Analisi Campione Fornitore" è diversa dalle altre attività
-// Acquisti: non è solo un log di qualcosa già successo, ma va seguita fino
-// alla risoluzione. Per questo, oltre a comparire qui (per restare
-// nell'elenco attività e nel grafico "Attività Acquisti per tipo"), alla
-// creazione genera anche una riga in "requests" (reparto "acquisti"), così
-// segue lo stesso percorso Nuova → Lavorazione → Risolta di qualunque altra
-// richiesta, e compare nella bacheca divisa per stato in cima alla pagina
-// Pipeline acquisti — vedi handleSubmit in PurchasePipeline.tsx. Il nome
-// completo ("... FORNITORE") la distingue dall'eventuale richiesta analisi
-// campione lato cliente nella Pipeline clienti.
-export interface ProcurementActivityRichiestaAnalisiCampioneFornitore {
-  tag: 'RICHIESTA ANALISI CAMPIONE FORNITORE'
-  descrizione_prodotto: string
-  scheda_tecnica_url: string | null
-  scheda_tecnica_name: string | null
-  msds_url: string | null
-  msds_name: string | null
-  tipo_analisi: TipoAnalisi | ''
-  prodotto_da_comparare: string
-  descrizione_richieste_analisi: string
-  prossimi_passi: string
-  prossimi_passi_data: string
-  urgenza: Urgenza | ''
-  richiesto_da: string
 }
 
 export interface ProcurementActivityReclamoFornitore {
@@ -310,8 +239,7 @@ export interface ProcurementActivityRiunioneInterna {
 }
 
 export type ProcurementActivityDetails =
-  | ProcurementActivityIncontroFornitore
-  | ProcurementActivityRichiestaAnalisiCampioneFornitore
+  | ProcurementActivityVisitaFornitore
   | ProcurementActivityReclamoFornitore
   | ProcurementActivityReclamoCliente
   | ProcurementActivityRiunioneInterna
