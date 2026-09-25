@@ -181,12 +181,39 @@ export interface DealActivityRiunioneInterna {
   temi_trattati: string
 }
 
+// "Richiesta Analisi Campione Cliente" — equivalente lato Pipeline clienti
+// della "Richiesta Analisi Campione Fornitore" della Pipeline acquisti (vedi
+// ProcurementActivityRichiestaAnalisiCampioneFornitore più sotto): stessa
+// idea di scheda tecnica/MSDS allegate e tipo di analisi, con in più
+// "descrizione_analisi_test_pelle"/"metodo_test" per l'opzione "Test pelle",
+// non pertinente lato fornitore. A differenza della versione fornitore, qui
+// "prossimi_passi_data" non fa parte di activity_details: segue lo stesso
+// campo "next_action" del deal già usato dalle altre attività di questa
+// pagina (vedi handleSubmit in Pipeline.tsx).
+export interface DealActivityRichiestaAnalisiCampioneCliente {
+  tag: 'RICHIESTA ANALISI CAMPIONE CLIENTE'
+  descrizione_prodotto: string
+  scheda_tecnica_url: string | null
+  scheda_tecnica_name: string | null
+  msds_url: string | null
+  msds_name: string | null
+  tipo_analisi: TipoAnalisi | ''
+  prodotto_da_comparare: string
+  descrizione_richieste_analisi: string
+  descrizione_analisi_test_pelle: string
+  metodo_test: string
+  prossimi_passi: string
+  urgenza: Urgenza | ''
+  richiesto_da: string
+}
+
 export type DealActivityDetails =
   | DealActivityPrimaVisita
   | DealActivityVisitaCommerciale
   | DealActivityVisitaTecnica
   | DealActivityReclamoCliente
   | DealActivityRiunioneInterna
+  | DealActivityRichiestaAnalisiCampioneCliente
   | null
 
 // ============ Pipeline Acquisti: attività guidate (Incontro Fornitore,
