@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent, type FormEvent, type ReactNode } from 'react'
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
@@ -7,21 +7,16 @@ import { ActivityAssignment, createActivityAssignments } from '../components/Act
 import {
   INCONTRO_TIPO_LABELS,
   NATURA_RECLAMO_LABELS,
-  PURCHASE_STATUSES,
-  PURCHASE_STATUS_LABELS,
   REPARTI_RIUNIONE,
   RICEZIONE_RECLAMO_LABELS,
   TIPO_ANALISI_LABELS,
   URGENZA_LABELS,
-  type Client,
   type IncontroTipo,
   type NaturaReclamo,
   type PendingAssignment,
   type ProcurementActivity,
   type ProcurementActivityDetails,
   type Profile,
-  type PurchaseRequest,
-  type PurchaseStatus,
   type Request,
   type RequestStatus,
   type RicezioneReclamo,
@@ -30,65 +25,37 @@ import {
   type Urgenza,
 } from '../lib/types'
 
-// Pipeline acquisti, ridisegnata (set 2026) sullo stesso schema della
-// Pipeline clienti: "+ Nuova richiesta" apre subito il form guidato con i 4
-// tipi attività dello "Schema Nuova Pipeline Acquisti" di Andrea (Visita
-// Fornitore, Reclamo Fornitore, Reclamo Cliente, Riunione Interna) — il
-// fornitore o il cliente si sceglie nel form stesso, non serve aprire prima
-// una scheda specifica. Le attività vivono in procurement_activities (ex
-// "supplier_activities" — vedi 0021_pipeline_acquisti_attivita.sql), non
-// nella tabella purchase_requests: non seguono uno stato d'ordine.
+// Pipeline acquisti, ridisegnata (set 2026, poi allineata definitivamente
+// alla Pipeline clienti su richiesta esplicita di Andrea): "+ Nuova
+// richiesta" apre il form guidato con i 4 tipi attività (Incontro
+// Fornitore, Richiesta Analisi Campione Fornitore, Reclamo Fornitore,
+// Riunione Interna) — il fornitore si sceglie nel form stesso. Ogni
+// attività registrata vive in procurement_activities (ex
+// "supplier_activities" — vedi 0021_pipeline_acquisti_attivita.sql) E genera
+// una riga collegata in "requests" (reparto "acquisti"), che segue lo stato
+// Nuova → In lavorazione → Risolta: è questa bacheca, non un elenco per
+// data, la vista principale della pagina — stessa idea della Pipeline
+// clienti, dove ogni attività diventa una scheda nella bacheca a colonne.
 //
 // La vecchia bacheca a colonne (prezzo unitario, quantità, stato
-// da_inviare→ricevuta — 0014_pipeline_acquisti.sql) resta sotto come
-// archivio delle richieste create prima di questo aggiornamento: restano
-// consultabili e aggiornabili, ma da "+ Nuova richiesta" non se ne creano
-// più di nuove — non era nello schema di Andrea. Visibile solo a
-// "ufficio_acquisti" e "dirigente" — vedi 0013_moduli_ruoli.sql.
+// da_inviare→ricevuta — 0014_pipeline_acquisti.sql, tabella
+// "purchase_requests") non è più la vista di questa pagina: le richieste
+// create prima di questo aggiornamento restano nel database, consultabili
+// via Supabase, ma "+ Nuova richiesta" da oggi crea solo attività con la
+// bacheca per stato qui sotto. Pagina visibile solo a "ufficio_acquisti" e
+// "dirigente" — vedi 0013_moduli_ruoli.sql.
 const CAN_ACCESS = ['ufficio_acquisti', 'dirigente']
-
-const currency = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
-
-// "Ferma da tempo": come nella Pipeline clienti, se una richiesta aperta non
-// viene toccata da più di ROTTING_DAYS giorni la evidenziamo.
-const ROTTING_DAYS = 14
-const OPEN_STATUSES: string[] = ['da_inviare', 'inviata', 'confermata']
-// Il percorso "sano" di una richiesta, senza "annullata" (un'uscita, non uno
-// step) — usato per lo stepper Path e per il pulsante di avanzamento rapido.
-const PATH_STATUSES: PurchaseStatus[] = ['da_inviare', 'inviata', 'confermata', 'ricevuta']
-
-function nextPathStatus(status: PurchaseStatus): PurchaseStatus | null {
-  const idx = PATH_STATUSES.indexOf(status)
-  if (idx === -1 || idx === PATH_STATUSES.length - 1) return null
-  return PATH_STATUSES[idx + 1]
-}
-
-function statusLabel(status: PurchaseStatus): string {
-  return PURCHASE_STATUS_LABELS[status] ?? status
-}
-
-function daysSince(dateStr: string): number {
-  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000)
-}
-
-function isRotting(request: PurchaseRequest): boolean {
-  return OPEN_STATUSES.includes(request.status) && daysSince(request.updated_at) > ROTTING_DAYS
-}
 
 function isOverdue(dateStr: string): boolean {
   return new Date(dateStr) < new Date(new Date().toDateString())
 }
 
-function estimatedValue(request: PurchaseRequest): number {
-  return Number(request.unit_price ?? 0) * Number(request.quantity ?? 0)
-}
-
-// Bacheca divisa per stato per le "richieste" del reparto acquisti (create
-// da "Richiesta Analisi Campione Fornitore", ma anche da qualunque altra
-// richiesta collegata al reparto "acquisti" in futuro): Andrea aveva
-// segnalato che nella Pipeline acquisti "non ci sono le giuste divisioni in
-// base allo stato" — questa sezione mostra Nuova/Lavorazione/Risolta
-// direttamente qui, oltre che nella pagina "Richieste".
+// Bacheca divisa per stato per le "richieste" del reparto acquisti — ogni
+// attività della Pipeline acquisti ne genera una (vedi handleSubmit in
+// NewProcurementActivityForm): Andrea aveva segnalato che nella Pipeline
+// acquisti "non ci sono le giuste divisioni in base allo stato" — questa
+// bacheca mostra Nuova/Lavorazione/Risolta direttamente qui, oltre che
+// nella pagina "Richieste".
 const ACQUISTI_REQUEST_STATUSES: RequestStatus[] = ['nuova', 'lavorazione', 'risolta']
 const ACQUISTI_REQUEST_STATUS_LABELS: Record<RequestStatus, string> = {
   nuova: 'Nuova',
@@ -96,79 +63,25 @@ const ACQUISTI_REQUEST_STATUS_LABELS: Record<RequestStatus, string> = {
   risolta: 'Risolta',
 }
 
-type SortKey = 'recenti' | 'valore_desc' | 'valore_asc' | 'scadenza' | 'ferme'
-
-const SORT_OPTIONS: { id: SortKey; label: string }[] = [
-  { id: 'recenti', label: 'Più recenti' },
-  { id: 'valore_desc', label: 'Valore (dal più alto)' },
-  { id: 'valore_asc', label: 'Valore (dal più basso)' },
-  { id: 'scadenza', label: 'Scadenza' },
-  { id: 'ferme', label: 'Ferme da più tempo' },
-]
-
-function compareRequests(a: PurchaseRequest, b: PurchaseRequest, sortBy: SortKey): number {
-  switch (sortBy) {
-    case 'valore_desc':
-      return estimatedValue(b) - estimatedValue(a)
-    case 'valore_asc':
-      return estimatedValue(a) - estimatedValue(b)
-    case 'scadenza': {
-      if (a.due_date && b.due_date) return new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
-      if (a.due_date) return -1
-      if (b.due_date) return 1
-      return 0
-    }
-    case 'ferme':
-      return daysSince(b.updated_at) - daysSince(a.updated_at)
-    case 'recenti':
-    default:
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  }
-}
-
 export function PurchasePipeline() {
   const { profile } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [requests, setRequests] = useState<PurchaseRequest[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
-  const [clients, setClients] = useState<Client[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [activities, setActivities] = useState<ProcurementActivity[]>([])
   const [activitiesLoading, setActivitiesLoading] = useState(true)
   const [acquistiRequests, setAcquistiRequests] = useState<Request[]>([])
   const [acquistiRequestsLoading, setAcquistiRequestsLoading] = useState(true)
   const [showActivityForm, setShowActivityForm] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [draggedId, setDraggedId] = useState<string | null>(null)
-  const [dragOverStatus, setDragOverStatus] = useState<PurchaseStatus | null>(null)
-  const [savingId, setSavingId] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [highlightedId, setHighlightedId] = useState<string | null>(null)
-  const [view, setView] = useState<'kanban' | 'list'>('kanban')
-  const [search, setSearch] = useState('')
-  const [supplierFilter, setSupplierFilter] = useState('')
-  const [sortBy, setSortBy] = useState<SortKey>('recenti')
 
   const canAccess = profile ? CAN_ACCESS.includes(profile.role) : false
-
-  async function loadRequests() {
-    setLoading(true)
-    const { data, error } = await supabase.from('purchase_requests').select('*').order('created_at', { ascending: false })
-    if (error) console.error(error)
-    setRequests((data as PurchaseRequest[]) ?? [])
-    setLoading(false)
-  }
 
   async function loadSuppliers() {
     const { data, error } = await supabase.from('suppliers').select('*').order('name')
     if (error) console.error(error)
     setSuppliers((data as Supplier[]) ?? [])
-  }
-
-  async function loadClients() {
-    const { data, error } = await supabase.from('clients').select('*').order('name')
-    if (error) console.error(error)
-    setClients((data as Client[]) ?? [])
   }
 
   async function loadActivities() {
@@ -182,10 +95,11 @@ export function PurchasePipeline() {
     setActivitiesLoading(false)
   }
 
-  // Richieste del reparto "acquisti" (compresa la "Richiesta analisi
-  // campione fornitore" creata dal form qui sopra), per la bacheca divisa
-  // per stato più sotto — la RLS (0030_richieste_calendario_acquisti.sql)
-  // limita già ciò che ufficio_acquisti/dirigente possono vedere.
+  // Richieste del reparto "acquisti", una per ogni attività registrata
+  // (vedi handleSubmit in NewProcurementActivityForm): sono la bacheca
+  // principale di questa pagina — la RLS
+  // (0030_richieste_calendario_acquisti.sql) limita già ciò che
+  // ufficio_acquisti/dirigente possono vedere.
   async function loadAcquistiRequests() {
     setAcquistiRequestsLoading(true)
     const { data, error } = await supabase
@@ -200,14 +114,11 @@ export function PurchasePipeline() {
 
   useEffect(() => {
     if (!canAccess) {
-      setLoading(false)
       setActivitiesLoading(false)
       setAcquistiRequestsLoading(false)
       return
     }
-    loadRequests()
     loadSuppliers()
-    loadClients()
     loadActivities()
     loadAcquistiRequests()
     supabase
@@ -218,18 +129,15 @@ export function PurchasePipeline() {
   }, [canAccess])
 
   // Deep-link (es. dalla scheda di un fornitore) — evidenzia e scorre fino
-  // alla richiesta indicata, azzerando filtri/vista che potrebbero nasconderla.
+  // alla richiesta indicata.
   useEffect(() => {
     const fromLink = searchParams.get('richiesta')
-    if (!fromLink || requests.length === 0) return
-    setView('kanban')
-    setSearch('')
-    setSupplierFilter('')
+    if (!fromLink || acquistiRequests.length === 0) return
     setExpandedId(fromLink)
     setHighlightedId(fromLink)
     setSearchParams({}, { replace: true })
     const timeout = setTimeout(() => {
-      document.getElementById('request-' + fromLink)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      document.getElementById('acquisti-request-' + fromLink)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }, 50)
     const clearHighlight = setTimeout(() => setHighlightedId(null), 3000)
     return () => {
@@ -237,28 +145,7 @@ export function PurchasePipeline() {
       clearTimeout(clearHighlight)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, requests])
-
-  async function updateStatus(request: PurchaseRequest, status: PurchaseStatus) {
-    if (request.status === status) return
-    setSavingId(request.id)
-    setRequests((current) => current.map((r) => (r.id === request.id ? { ...r, status } : r)))
-    const { error } = await supabase.from('purchase_requests').update({ status }).eq('id', request.id)
-    setSavingId(null)
-    if (error) {
-      alert('Non è stato possibile aggiornare lo stato: ' + error.message)
-      loadRequests()
-    }
-  }
-
-  async function updateField(request: PurchaseRequest, patch: Partial<PurchaseRequest>) {
-    const { error } = await supabase.from('purchase_requests').update(patch).eq('id', request.id)
-    if (error) {
-      alert('Non è stato possibile salvare la modifica: ' + error.message)
-      return
-    }
-    setRequests((rs) => rs.map((r) => (r.id === request.id ? { ...r, ...patch } : r)))
-  }
+  }, [searchParams, acquistiRequests])
 
   async function updateAcquistiRequestStatus(request: Request, status: RequestStatus) {
     if (request.status === status) return
@@ -271,8 +158,6 @@ export function PurchasePipeline() {
   }
 
   const supplierMap = useMemo(() => new Map(suppliers.map((s) => [s.id, s])), [suppliers])
-  const clientMap = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients])
-  const requesterMap = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles])
 
   // La richiesta collegata non ha un campo fornitore proprio: lo risolve
   // passando dall'attività a cui è agganciata (ref_table/ref_id — vedi
@@ -284,15 +169,10 @@ export function PurchasePipeline() {
     return supplierMap.get(activity.supplier_id)?.name
   }
 
-  const filteredRequests = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return requests.filter((r) => {
-      const supplierName = supplierMap.get(r.supplier_id)?.name ?? ''
-      if (q && !(supplierName.toLowerCase().includes(q) || r.subject.toLowerCase().includes(q))) return false
-      if (supplierFilter && r.supplier_id !== supplierFilter) return false
-      return true
-    })
-  }, [requests, search, supplierFilter, supplierMap])
+  function acquistiRequestActivity(r: Request): ProcurementActivity | undefined {
+    if (r.ref_table !== 'procurement_activities' || !r.ref_id) return undefined
+    return activities.find((a) => a.id === r.ref_id)
+  }
 
   if (!profile) return null
 
@@ -323,34 +203,18 @@ export function PurchasePipeline() {
         />
       )}
 
-      {activitiesLoading && <p className="muted">Caricamento…</p>}
-      {!activitiesLoading && activities.length === 0 && !showActivityForm && (
+      <p className="muted">
+        Ogni attività registrata (Incontro Fornitore, Richiesta Analisi Campione Fornitore, Reclamo Fornitore,
+        Riunione Interna) genera qui una scheda che segue lo stato Nuova → In lavorazione → Risolta — la stessa
+        bacheca che trovi anche nella pagina "Richieste".
+      </p>
+
+      {(activitiesLoading || acquistiRequestsLoading) && <p className="muted">Caricamento…</p>}
+      {!activitiesLoading && !acquistiRequestsLoading && acquistiRequests.length === 0 && !showActivityForm && (
         <p className="muted">Nessuna richiesta registrata ancora.</p>
       )}
-      {!activitiesLoading && activities.length > 0 && (
-        <div className="client-deals-list procurement-activities-list">
-          {activities.map((a) => (
-            <ProcurementActivityRow
-              key={a.id}
-              activity={a}
-              supplierName={a.supplier_id ? supplierMap.get(a.supplier_id)?.name : undefined}
-              clientName={a.client_id ? clientMap.get(a.client_id)?.name : undefined}
-            />
-          ))}
-        </div>
-      )}
-
-      <div className="section-title client-deals-title">Richieste acquisti — stato</div>
-      <p className="muted">
-        Le "Richiesta analisi campione fornitore" registrate qui sopra generano una richiesta vera e propria, che
-        segue lo stato Nuova → In lavorazione → Risolta — la stessa che trovi anche nella pagina "Richieste".
-      </p>
-      {acquistiRequestsLoading && <p className="muted">Caricamento…</p>}
-      {!acquistiRequestsLoading && acquistiRequests.length === 0 && (
-        <p className="muted">Nessuna richiesta d'acquisto ancora.</p>
-      )}
-      {!acquistiRequestsLoading && acquistiRequests.length > 0 && (
-        <div className="kanban-board acquisti-requests-board">
+      {!activitiesLoading && !acquistiRequestsLoading && acquistiRequests.length > 0 && (
+        <div className="kanban-board">
           {ACQUISTI_REQUEST_STATUSES.map((status) => {
             const rows = acquistiRequests.filter((r) => r.status === status)
             return (
@@ -362,532 +226,57 @@ export function PurchasePipeline() {
                 </div>
                 <div className="kanban-cards">
                   {rows.length === 0 && <p className="muted kanban-empty">Nessuna richiesta qui.</p>}
-                  {rows.map((r) => {
-                    const supplierName = acquistiRequestSupplierName(r)
-                    return (
-                      <div key={r.id} className="card kanban-card">
-                        <div className="kanban-card-main">
-                          <strong>{r.subject}</strong>
-                          {supplierName && <span className="muted">{supplierName}</span>}
-                        </div>
-                        {r.due_date && (
-                          <span className={'kanban-next-action' + (isOverdue(r.due_date) ? ' kanban-next-action-overdue' : '')}>
-                            Scadenza: {new Date(r.due_date).toLocaleDateString('it-IT')}
-                          </span>
-                        )}
-                        <div className="kanban-quick-actions">
-                          {ACQUISTI_REQUEST_STATUSES.filter((s) => s !== status).map((s) => (
-                            <button
-                              key={s}
-                              type="button"
-                              className="btn btn-ghost btn-sm"
-                              onClick={() => updateAcquistiRequestStatus(r, s)}
-                            >
-                              → {ACQUISTI_REQUEST_STATUS_LABELS[s]}
-                            </button>
-                          ))}
-                        </div>
-                        <Link to={`/richieste?id=${r.id}`} className="kanban-details-toggle">
-                          Apri in Richieste ▸
-                        </Link>
-                      </div>
-                    )
-                  })}
+                  {rows.map((r) => (
+                    <AcquistiRequestCard
+                      key={r.id}
+                      request={r}
+                      activity={acquistiRequestActivity(r)}
+                      supplierName={acquistiRequestSupplierName(r)}
+                      highlighted={highlightedId === r.id}
+                      expanded={expandedId === r.id}
+                      onToggleExpand={() => setExpandedId((id) => (id === r.id ? null : r.id))}
+                      onChangeStatus={(s) => updateAcquistiRequestStatus(r, s)}
+                    />
+                  ))}
                 </div>
               </div>
             )
           })}
         </div>
       )}
-
-      <div className="section-title client-deals-title">Richieste d'acquisto (archivio)</div>
-      <p className="muted">
-        Le richieste d'acquisto con prezzo, quantità e stato dell'ordine create prima di questo aggiornamento restano
-        qui, consultabili e aggiornabili — da oggi le nuove richieste si creano con "+ Nuova richiesta" sopra.
-      </p>
-
-      {loading && <p className="muted">Caricamento…</p>}
-
-      {!loading && (
-        <>
-          <div className="pipeline-toolbar">
-            <input
-              className="pipeline-search-input"
-              placeholder="Cerca fornitore o oggetto…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <select value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)}>
-              <option value="">Tutti i fornitori</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortKey)}>
-              {SORT_OPTIONS.map((o) => (
-                <option key={o.id} value={o.id}>
-                  Ordina: {o.label}
-                </option>
-              ))}
-            </select>
-            <div className="pipeline-view-toggle">
-              <button type="button" className={view === 'kanban' ? 'active' : ''} onClick={() => setView('kanban')}>
-                Bacheca
-              </button>
-              <button type="button" className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}>
-                Elenco
-              </button>
-            </div>
-          </div>
-
-          {filteredRequests.length === 0 && <p className="muted">Nessuna richiesta corrisponde ai filtri selezionati.</p>}
-
-          {filteredRequests.length > 0 && view === 'kanban' && (
-            <div className="kanban-board">
-              {PURCHASE_STATUSES.map((status) => {
-                const rows = filteredRequests.filter((r) => r.status === status.id).sort((a, b) => compareRequests(a, b, sortBy))
-                const total = rows.reduce((sum, r) => sum + estimatedValue(r), 0)
-                const rottingCount = rows.filter(isRotting).length
-                return (
-                  <div
-                    key={status.id}
-                    className={'kanban-col' + (dragOverStatus === status.id ? ' drag-over' : '')}
-                    onDragOver={(e) => {
-                      if (!draggedId) return
-                      e.preventDefault()
-                      setDragOverStatus(status.id)
-                    }}
-                    onDragLeave={() => setDragOverStatus((s) => (s === status.id ? null : s))}
-                    onDrop={(e) => {
-                      e.preventDefault()
-                      setDragOverStatus(null)
-                      const id = e.dataTransfer.getData('text/plain')
-                      const request = requests.find((r) => r.id === id)
-                      if (request) updateStatus(request, status.id)
-                    }}
-                  >
-                    <div className="kanban-col-head">
-                      <span>
-                        {status.label} <span className="muted">· {rows.length}</span>
-                        {rottingCount > 0 && (
-                          <span className="kanban-rotting-badge" title={`${rottingCount} ferma/e da più di ${ROTTING_DAYS} giorni`}>
-                            {rottingCount}
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    <div className="kanban-col-total-row muted">{currency.format(total)}</div>
-
-                    <div className="kanban-cards">
-                      {rows.length === 0 && <p className="muted kanban-empty">Nessuna richiesta qui.</p>}
-                      {rows.map((request) => (
-                        <RequestCard
-                          key={request.id}
-                          request={request}
-                          supplier={supplierMap.get(request.supplier_id)}
-                          requester={request.requested_by ? requesterMap.get(request.requested_by) : undefined}
-                          rotting={isRotting(request)}
-                          dragging={draggedId === request.id}
-                          saving={savingId === request.id}
-                          highlighted={highlightedId === request.id}
-                          expanded={expandedId === request.id}
-                          requesters={profiles}
-                          onToggleExpand={() => setExpandedId((id) => (id === request.id ? null : request.id))}
-                          onDragStart={(e) => {
-                            e.dataTransfer.setData('text/plain', request.id)
-                            e.dataTransfer.effectAllowed = 'move'
-                            setDraggedId(request.id)
-                          }}
-                          onDragEnd={() => {
-                            setDraggedId(null)
-                            setDragOverStatus(null)
-                          }}
-                          onChangeStatus={(s) => updateStatus(request, s)}
-                          onChangeField={(patch) => updateField(request, patch)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          {filteredRequests.length > 0 && view === 'list' && (
-            <div className="pipeline-list">
-              <div className="pipeline-list-head">
-                <span className="pcol-client">Fornitore / oggetto</span>
-                <span className="pcol-stage">Stato</span>
-                <button type="button" className="pcol-value" onClick={() => setSortBy('valore_desc')}>
-                  Valore
-                </button>
-                <span className="pcol-owner">Rich.</span>
-                <button type="button" className="pcol-action" onClick={() => setSortBy('scadenza')}>
-                  Scadenza
-                </button>
-                <span className="pcol-expand" />
-              </div>
-              {filteredRequests
-                .slice()
-                .sort((a, b) => compareRequests(a, b, sortBy))
-                .map((request) => {
-                  const supplier = supplierMap.get(request.supplier_id)
-                  const requester = request.requested_by ? requesterMap.get(request.requested_by) : undefined
-                  const rotting = isRotting(request)
-                  return (
-                    <div key={request.id} id={'request-' + request.id}>
-                      <div
-                        className={
-                          'pipeline-row' +
-                          (highlightedId === request.id ? ' pipeline-row-highlighted' : '') +
-                          (rotting ? ' pipeline-row-rotting' : '')
-                        }
-                        onClick={() => setExpandedId((id) => (id === request.id ? null : request.id))}
-                      >
-                        <div className="pcol-client">
-                          <strong>{supplier?.name ?? 'fornitore eliminato'}</strong>
-                          <span className="muted">{request.subject}</span>
-                        </div>
-                        <span className={'pill pill-' + request.status}>{statusLabel(request.status)}</span>
-                        <span className="pcol-value pipeline-row-value">{currency.format(estimatedValue(request))}</span>
-                        <span className="pcol-owner">
-                          <RequesterAvatar requester={requester} />
-                        </span>
-                        <span className={'pcol-action' + (request.due_date && isOverdue(request.due_date) ? ' pipeline-action-overdue' : '')}>
-                          {request.due_date ? new Date(request.due_date).toLocaleDateString('it-IT') : '—'}
-                        </span>
-                        <span className="pcol-expand">{expandedId === request.id ? '▾' : '▸'}</span>
-                      </div>
-                      {expandedId === request.id && (
-                        <div className="pipeline-row-expanded">
-                          <RequestDetails
-                            request={request}
-                            requesters={profiles}
-                            onChangeStatus={(s) => updateStatus(request, s)}
-                            onChangeField={(patch) => updateField(request, patch)}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-            </div>
-          )}
-        </>
-      )}
     </div>
   )
 }
 
-function RequesterAvatar({ requester }: { requester: Profile | undefined }) {
-  if (!requester) {
-    return (
-      <span className="deal-owner-avatar deal-owner-avatar-empty" title="Nessun richiedente assegnato">
-        —
-      </span>
-    )
-  }
-  return (
-    <span className="deal-owner-avatar" title={requester.full_name}>
-      {requester.initials}
-    </span>
-  )
-}
-
-// Stepper di stato, stessa idea del componente "Path" della Pipeline
-// clienti: pallini collegati (senza etichette) nella card compatta della
-// bacheca, versione estesa con etichette e grid elastica nell'elenco.
-function StatusPath({
+// Scheda della bacheca per stato: mostra il tipo di attività e il
+// fornitore nel titolo (già nell'oggetto della richiesta collegata), con i
+// dettagli guidati completi e i commenti a comparsa — stessa idea di
+// DealDetails nella Pipeline clienti.
+function AcquistiRequestCard({
   request,
-  compact = false,
-  onChangeStatus,
-}: {
-  request: PurchaseRequest
-  compact?: boolean
-  onChangeStatus: (status: PurchaseStatus) => void
-}) {
-  if (request.status === 'annullata') {
-    return (
-      <div className="stage-path-lost">
-        <span className="stage-path-lost-label">Richiesta annullata</span>
-        <button type="button" className="stage-path-lost-btn" onClick={() => onChangeStatus('da_inviare')}>
-          Riapri come "da inviare"
-        </button>
-      </div>
-    )
-  }
-
-  const currentIdx = PATH_STATUSES.indexOf(request.status)
-
-  if (compact) {
-    const track: ReactNode[] = []
-    PATH_STATUSES.forEach((s, i) => {
-      const state = i < currentIdx ? 'done' : i === currentIdx ? 'current' : 'todo'
-      track.push(
-        <button
-          type="button"
-          key={s}
-          title={statusLabel(s)}
-          className={'stage-path-dot-only stage-path-' + state}
-          onClick={() => onChangeStatus(s)}
-        />,
-      )
-      if (i < PATH_STATUSES.length - 1) {
-        track.push(<span key={s + '-c'} className={'stage-path-connector' + (i < currentIdx ? ' done' : '')} />)
-      }
-    })
-    return (
-      <div className="stage-path-compact">
-        <div className="stage-path-compact-track">{track}</div>
-        <div className="stage-path-compact-foot">
-          <span className="muted">{statusLabel(request.status)}</span>
-          {request.status !== 'ricevuta' && (
-            <button type="button" className="stage-path-lost-btn" onClick={() => onChangeStatus('annullata')}>
-              Annulla
-            </button>
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="stage-path">
-      <div className="stage-path-track">
-        {PATH_STATUSES.map((s, i) => {
-          const state = i < currentIdx ? 'done' : i === currentIdx ? 'current' : 'todo'
-          return (
-            <button
-              type="button"
-              key={s}
-              className={'stage-path-step stage-path-' + state}
-              onClick={() => onChangeStatus(s)}
-            >
-              <span className="stage-path-dot">{state === 'done' ? '✓' : i + 1}</span>
-              <span className="stage-path-label">{statusLabel(s)}</span>
-            </button>
-          )
-        })}
-      </div>
-      {request.status !== 'ricevuta' && (
-        <div className="stage-path-foot">
-          <button type="button" className="stage-path-lost-btn" onClick={() => onChangeStatus('annullata')}>
-            Segna come annullata
-          </button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function RequestDetails({
-  request,
-  compact = false,
-  requesters,
-  onChangeStatus,
-  onChangeField,
-}: {
-  request: PurchaseRequest
-  compact?: boolean
-  requesters: Profile[]
-  onChangeStatus: (s: PurchaseStatus) => void
-  onChangeField: (patch: Partial<PurchaseRequest>) => void
-}) {
-  const [uploading, setUploading] = useState(false)
-
-  async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploading(true)
-    const path = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
-    const { error } = await supabase.storage.from('purchase-attachments').upload(path, file, { upsert: true })
-    setUploading(false)
-    e.target.value = ''
-    if (error) {
-      alert("Non è stato possibile caricare l'allegato: " + error.message)
-      return
-    }
-    const { data } = supabase.storage.from('purchase-attachments').getPublicUrl(path)
-    onChangeField({ attachment_url: data.publicUrl, attachment_name: file.name })
-  }
-
-  return (
-    <div className="kanban-card-expanded" onClick={(e) => e.stopPropagation()}>
-      <StatusPath request={request} compact={compact} onChangeStatus={onChangeStatus} />
-
-      <div className="field-row">
-        <label className="field-label">Richiesta da</label>
-        <select value={request.requested_by ?? ''} onChange={(e) => onChangeField({ requested_by: e.target.value || null })}>
-          <option value="">— Nessuno —</option>
-          {requesters.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.full_name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="field-row-2">
-        <div className="field-row">
-          <label className="field-label">Prezzo unitario (€)</label>
-          <input
-            type="number"
-            defaultValue={request.unit_price ?? ''}
-            placeholder="0"
-            onBlur={(e) => {
-              const v = e.target.value === '' ? null : Number(e.target.value)
-              if (v !== request.unit_price) onChangeField({ unit_price: v })
-            }}
-          />
-        </div>
-        <div className="field-row">
-          <label className="field-label">Quantità</label>
-          <div className="field-row-inline">
-            <input
-              type="number"
-              defaultValue={request.quantity ?? ''}
-              placeholder="0"
-              onBlur={(e) => {
-                const v = e.target.value === '' ? null : Number(e.target.value)
-                if (v !== request.quantity) onChangeField({ quantity: v })
-              }}
-            />
-            <input
-              defaultValue={request.quantity_unit ?? ''}
-              placeholder="unità (kg, pezzi…)"
-              onBlur={(e) => {
-                const v = e.target.value.trim() || null
-                if (v !== request.quantity_unit) onChangeField({ quantity_unit: v })
-              }}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="field-row">
-        <label className="field-label">Scadenza</label>
-        <input
-          type="date"
-          value={request.due_date ?? ''}
-          onChange={(e) => onChangeField({ due_date: e.target.value || null })}
-        />
-      </div>
-
-      <div className="field-row">
-        <label className="field-label">Specifiche d'ordine</label>
-        <textarea
-          className="note-field"
-          defaultValue={request.order_specs}
-          placeholder="Specifiche tecniche, condizioni di consegna…"
-          onBlur={(e) => {
-            if (e.target.value !== request.order_specs) onChangeField({ order_specs: e.target.value })
-          }}
-        />
-      </div>
-
-      <div className="field-row">
-        <label className="field-label">Dettagli</label>
-        <textarea
-          className="note-field"
-          defaultValue={request.body}
-          placeholder="Nota…"
-          onBlur={(e) => {
-            if (e.target.value !== request.body) onChangeField({ body: e.target.value })
-          }}
-        />
-      </div>
-
-      <div className="field-row">
-        <label className="field-label">Documentazione (facoltativa — es. scheda tecnica, conferma d'ordine, DDT)</label>
-        {request.attachment_url ? (
-          <div className="marketing-attachment-row">
-            <a href={request.attachment_url} target="_blank" rel="noreferrer">
-              📎 {request.attachment_name}
-            </a>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => onChangeField({ attachment_url: null, attachment_name: null })}
-            >
-              Rimuovi
-            </button>
-          </div>
-        ) : (
-          <input type="file" onChange={handleFileChange} disabled={uploading} />
-        )}
-        {uploading && <span className="muted">Caricamento…</span>}
-      </div>
-
-      <CommentThread refTable="purchase_requests" refId={request.id} refLabel={request.subject} />
-    </div>
-  )
-}
-
-function RequestCard({
-  request,
-  supplier,
-  requester,
-  rotting,
-  dragging,
-  saving,
+  activity,
+  supplierName,
   highlighted,
   expanded,
-  requesters,
   onToggleExpand,
-  onDragStart,
-  onDragEnd,
   onChangeStatus,
-  onChangeField,
 }: {
-  request: PurchaseRequest
-  supplier: Supplier | undefined
-  requester: Profile | undefined
-  rotting: boolean
-  dragging: boolean
-  saving: boolean
+  request: Request
+  activity: ProcurementActivity | undefined
+  supplierName: string | undefined
   highlighted: boolean
   expanded: boolean
-  requesters: Profile[]
   onToggleExpand: () => void
-  onDragStart: (e: DragEvent<HTMLDivElement>) => void
-  onDragEnd: () => void
-  onChangeStatus: (s: PurchaseStatus) => void
-  onChangeField: (patch: Partial<PurchaseRequest>) => void
+  onChangeStatus: (s: RequestStatus) => void
 }) {
-  const next = nextPathStatus(request.status)
-  const showQuickActions = request.status !== 'ricevuta' && request.status !== 'annullata'
-
   return (
     <div
-      id={'request-' + request.id}
-      className={
-        'card kanban-card' +
-        (dragging ? ' dragging' : '') +
-        (saving ? ' saving' : '') +
-        (rotting ? ' kanban-card-rotting' : '') +
-        (highlighted ? ' kanban-card-highlighted' : '')
-      }
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
+      id={'acquisti-request-' + request.id}
+      className={'card kanban-card' + (highlighted ? ' kanban-card-highlighted' : '')}
     >
       <div className="kanban-card-main">
-        <div className="kanban-card-top">
-          <strong>{supplier?.name ?? 'fornitore eliminato'}</strong>
-          <RequesterAvatar requester={requester} />
-        </div>
-        <span className="muted">{request.subject}</span>
-        {request.quantity != null && (
-          <span className="muted">
-            {request.quantity} {request.quantity_unit ?? ''}
-          </span>
-        )}
-      </div>
-
-      <div className="kanban-card-value-row">
-        <span className="kanban-card-value">{currency.format(estimatedValue(request))}</span>
+        <strong>{request.subject}</strong>
+        {supplierName && !request.subject.includes(supplierName) && <span className="muted">{supplierName}</span>}
       </div>
 
       {request.due_date && (
@@ -896,32 +285,26 @@ function RequestCard({
         </span>
       )}
 
-      {rotting && <span className="kanban-rotting-label">Ferma da {daysSince(request.updated_at)} giorni — nessun aggiornamento</span>}
-
-      {showQuickActions && (
-        <div className="kanban-quick-actions">
-          {next && (
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => onChangeStatus(next)}>
-              {next === 'ricevuta' ? '✓ Segna come ricevuta' : '→ ' + statusLabel(next)}
-            </button>
-          )}
-          <button type="button" className="btn btn-ghost btn-sm kanban-lost-btn" onClick={() => onChangeStatus('annullata')}>
-            Annulla
+      <div className="kanban-quick-actions">
+        {ACQUISTI_REQUEST_STATUSES.filter((s) => s !== request.status).map((s) => (
+          <button key={s} type="button" className="btn btn-ghost btn-sm" onClick={() => onChangeStatus(s)}>
+            → {ACQUISTI_REQUEST_STATUS_LABELS[s]}
           </button>
-        </div>
-      )}
+        ))}
+      </div>
 
       <button type="button" className="kanban-details-toggle" onClick={onToggleExpand}>
         {expanded ? 'Nascondi dettagli ▾' : 'Dettagli e commenti ▸'}
       </button>
       {expanded && (
-        <RequestDetails
-          request={request}
-          compact
-          requesters={requesters}
-          onChangeStatus={onChangeStatus}
-          onChangeField={onChangeField}
-        />
+        <div className="kanban-card-expanded" onClick={(e) => e.stopPropagation()}>
+          {activity ? (
+            <ProcurementActivityDetailsView details={activity.activity_details} />
+          ) : (
+            <p className="muted">Attività collegata non trovata.</p>
+          )}
+          <CommentThread refTable="requests" refId={request.id} refLabel={request.subject} />
+        </div>
       )}
     </div>
   )
@@ -1010,37 +393,6 @@ function ProcurementActivityDetailsView({ details }: { details: ProcurementActiv
         <span><strong>Data prossimi passi:</strong> {new Date(details.prossimi_passi_data).toLocaleDateString('it-IT')}</span>
       )}
       {details.urgenza && <span><strong>Urgenza:</strong> {URGENZA_LABELS[details.urgenza]}</span>}
-    </div>
-  )
-}
-
-function ProcurementActivityRow({
-  activity,
-  supplierName,
-  clientName,
-}: {
-  activity: ProcurementActivity
-  supplierName: string | undefined
-  clientName: string | undefined
-}) {
-  const [expanded, setExpanded] = useState(false)
-  const tag = activity.activity_details?.tag ?? 'Attività'
-  const who = supplierName ?? clientName ?? (tag === 'RIUNIONE INTERNA' ? 'Interna' : '—')
-  return (
-    <div>
-      <div className="client-deal-row" style={{ cursor: 'pointer' }} onClick={() => setExpanded((v) => !v)}>
-        <span className="client-timeline-when muted">
-          {new Date(activity.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}
-        </span>
-        <span>{tag}</span>
-        <span className="muted">{who}</span>
-        <span className="muted">{expanded ? 'Nascondi ▾' : 'Dettagli ▸'}</span>
-      </div>
-      {expanded && (
-        <div className="activity-details-view">
-          <ProcurementActivityDetailsView details={activity.activity_details} />
-        </div>
-      )}
     </div>
   )
 }
@@ -1356,31 +708,67 @@ function NewProcurementActivityForm({
       return
     }
 
-    // "Richiesta Analisi Campione Fornitore" va seguita fino alla
-    // risoluzione — a differenza delle altre attività Acquisti, genera
-    // anche una richiesta vera e propria (reparto "acquisti"), così compare
+    // Ogni attività Acquisti genera anche una richiesta vera e propria
+    // (reparto "acquisti"), così TUTTE — incontri fornitore, richieste
+    // analisi campione, reclami fornitore e riunioni interne — compaiono
     // nella bacheca qui sopra e in "Richieste" con gli stati
-    // Nuova/Lavorazione/Risolta, collegata all'attività (vedi refRecords.ts
+    // Nuova/Lavorazione/Risolta, collegate all'attività (vedi refRecords.ts
     // — "procurement_activities" è già un tipo di collegamento valido). Un
     // errore qui non deve far perdere l'attività già registrata: si avvisa
     // e si prosegue, come per le assegnazioni.
-    if (isRichiestaAnalisiFornitore) {
+    let requestSubject = ''
+    let requestBodyLines: string[] = []
+    let requestDueDate: string | null = null
+    let requestPriority: Urgenza = 'media'
+
+    if (activityTag === 'INCONTRO FORNITORE') {
+      requestSubject = `Incontro fornitore — ${resolvedSupplierName}`
+      requestBodyLines = [
+        `Fornitore: ${resolvedSupplierName}`,
+        incontro ? `Incontro: ${INCONTRO_TIPO_LABELS[incontro]}` : '',
+        temiTrattatiVisita.trim() ? `Temi trattati: ${temiTrattatiVisita.trim()}` : '',
+        prodottiPresentati.trim() ? `Prodotti presentati: ${prodottiPresentati.trim()}` : '',
+      ]
+      requestDueDate = prossimiPassiDataVisita || null
+    } else if (isRichiestaAnalisiFornitore) {
+      requestSubject = `Richiesta analisi campione fornitore — ${resolvedSupplierName}`
+      requestBodyLines = [
+        `Fornitore: ${resolvedSupplierName}`,
+        `Descrizione prodotto: ${descrizioneProdottoAnalisi.trim()}`,
+        tipoAnalisi ? `Descrizione analisi: ${TIPO_ANALISI_LABELS[tipoAnalisi]}` : '',
+        prodottoDaComparare.trim() ? `Prodotto da comparare: ${prodottoDaComparare.trim()}` : '',
+        descrizioneRichiesteAnalisi.trim() ? `Descrizione richieste analisi: ${descrizioneRichiesteAnalisi.trim()}` : '',
+        richiestoDaAnalisi ? `Richiesta da: ${richiestoDaAnalisi}` : '',
+      ]
+      requestDueDate = prossimiPassiDataAnalisi || null
+      requestPriority = (urgenzaAnalisi || 'media') as Urgenza
+    } else if (activityTag === 'RECLAMO FORNITORE') {
+      requestSubject = `Reclamo fornitore — ${resolvedSupplierName}`
+      requestBodyLines = [
+        `Fornitore: ${resolvedSupplierName}`,
+        natura ? `Natura: ${NATURA_RECLAMO_LABELS[natura]}` : '',
+        nomeProdotto.trim() ? `Nome prodotto: ${nomeProdotto.trim()}` : '',
+        descrizioneReclamo.trim() ? `Descrizione reclamo: ${descrizioneReclamo.trim()}` : '',
+      ]
+      requestDueDate = prossimiPassiDataReclamo || null
+      requestPriority = (urgenza || 'media') as Urgenza
+    } else if (activityTag === 'RIUNIONE INTERNA') {
+      requestSubject = `Riunione interna${reparti.length > 0 ? ' — ' + reparti.join(', ') : ''}`
+      requestBodyLines = [
+        reparti.length > 0 ? `Reparti: ${reparti.join(', ')}` : '',
+        personePresenti.trim() ? `Persone presenti: ${personePresenti.trim()}` : '',
+        temiTrattatiRiunione.trim() ? `Temi trattati: ${temiTrattatiRiunione.trim()}` : '',
+      ]
+    }
+
+    if (requestSubject) {
       const { error: requestError } = await supabase.from('requests').insert({
-        subject: `Richiesta analisi campione fornitore — ${resolvedSupplierName}`,
+        subject: requestSubject,
         sender: createdByName,
         department: 'acquisti',
-        priority: (urgenzaAnalisi || 'media') as Urgenza,
-        body: [
-          `Fornitore: ${resolvedSupplierName}`,
-          `Descrizione prodotto: ${descrizioneProdottoAnalisi.trim()}`,
-          tipoAnalisi ? `Descrizione analisi: ${TIPO_ANALISI_LABELS[tipoAnalisi]}` : '',
-          prodottoDaComparare.trim() ? `Prodotto da comparare: ${prodottoDaComparare.trim()}` : '',
-          descrizioneRichiesteAnalisi.trim() ? `Descrizione richieste analisi: ${descrizioneRichiesteAnalisi.trim()}` : '',
-          richiestoDaAnalisi ? `Richiesta da: ${richiestoDaAnalisi}` : '',
-        ]
-          .filter(Boolean)
-          .join('\n'),
-        due_date: prossimiPassiDataAnalisi || null,
+        priority: requestPriority,
+        body: requestBodyLines.filter(Boolean).join('\n'),
+        due_date: requestDueDate,
         type: 'interna',
         status: 'nuova',
         ref_table: 'procurement_activities',
@@ -1429,6 +817,13 @@ function NewProcurementActivityForm({
           ))}
         </select>
       </div>
+
+      {activityTag && (
+        <p className="muted">
+          Alla registrazione viene creata anche una richiesta in "Richieste" (reparto acquisti), visibile nella
+          bacheca qui sopra e da seguire con gli stati Nuova / Lavorazione / Risolta.
+        </p>
+      )}
 
       {needsSupplier && (
         <>
@@ -1592,10 +987,6 @@ function NewProcurementActivityForm({
             </select>
           </div>
 
-          <p className="muted">
-            Alla registrazione viene creata anche una richiesta in "Richieste" (reparto acquisti), visibile nella
-            bacheca qui sopra e da seguire con gli stati Nuova / Lavorazione / Risolta.
-          </p>
           <ActivityAssignment profiles={assignees} assignments={assignments} onChange={setAssignments} />
         </div>
       )}
