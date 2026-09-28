@@ -4,7 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { CommentThread } from '../components/CommentThread'
 import { RefPicker } from '../components/RefPicker'
-import { describeRef, refLinkPath, type RequestRefTable } from '../lib/refRecords'
+import { describeRef, refLinkPath, REQUEST_REF_LABELS, REQUEST_REF_TABLES, type RequestRefTable } from '../lib/refRecords'
 import { type Client, type Profile, type Request, type RequestDepartment, type RequestPriority, type RequestStatus } from '../lib/types'
 
 const STATUSES: RequestStatus[] = ['nuova', 'lavorazione', 'risolta']
@@ -25,6 +25,14 @@ const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
   tutte: 'Tutte',
 }
 
+// Filtri secondari per "tipo di richiesta" (richiesti da Andrea, set 2026):
+// reparto, a cosa è collegata (o a niente) e interna/esterna — si
+// combinano tra loro e con il filtro di stato qui sopra, così le "Nuove"
+// possono essere ristrette solo a quelle, ad es., dell'ufficio acquisti.
+type DepartmentFilter = RequestDepartment | 'tutti'
+type RefTableFilter = RequestRefTable | 'nessuno' | 'tutti'
+type TypeFilter = 'interna' | 'esterna' | 'tutti'
+
 export function Requests() {
   const { profile } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -32,6 +40,9 @@ export function Requests() {
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('nuova')
+  const [departmentFilter, setDepartmentFilter] = useState<DepartmentFilter>('tutti')
+  const [refTableFilter, setRefTableFilter] = useState<RefTableFilter>('tutti')
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('tutti')
   const [selected, setSelected] = useState<Request | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -114,14 +125,30 @@ export function Requests() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, requests])
 
-  const statusCounts: Record<StatusFilter, number> = {
-    nuova: requests.filter((r) => r.status === 'nuova').length,
-    lavorazione: requests.filter((r) => r.status === 'lavorazione').length,
-    risolta: requests.filter((r) => r.status === 'risolta').length,
-    tutte: requests.length,
+  // I filtri secondari (reparto, collegamento, interna/esterna) si applicano
+  // insieme a quello di stato — i conteggi sulle schede Nuova/In
+  // lavorazione/... qui sotto riflettono già gli altri filtri attivi, così
+  // restano coerenti con quello che si vede aprendo quella scheda.
+  function matchesSecondaryFilters(r: Request): boolean {
+    if (departmentFilter !== 'tutti' && r.department !== departmentFilter) return false
+    if (refTableFilter === 'nessuno' && r.ref_table) return false
+    if (refTableFilter !== 'tutti' && refTableFilter !== 'nessuno' && r.ref_table !== refTableFilter) return false
+    if (typeFilter !== 'tutti' && r.type !== typeFilter) return false
+    return true
   }
 
-  const visibleRequests = requests.filter((r) => statusFilter === 'tutte' || r.status === statusFilter)
+  const secondaryFiltered = requests.filter(matchesSecondaryFilters)
+
+  const statusCounts: Record<StatusFilter, number> = {
+    nuova: secondaryFiltered.filter((r) => r.status === 'nuova').length,
+    lavorazione: secondaryFiltered.filter((r) => r.status === 'lavorazione').length,
+    risolta: secondaryFiltered.filter((r) => r.status === 'risolta').length,
+    tutte: secondaryFiltered.length,
+  }
+
+  const visibleRequests = secondaryFiltered.filter((r) => statusFilter === 'tutte' || r.status === statusFilter)
+
+  const secondaryFiltersActive = departmentFilter !== 'tutti' || refTableFilter !== 'tutti' || typeFilter !== 'tutti'
 
   async function updateStatus(request: Request, status: RequestStatus) {
     const { error } = await supabase.from('requests').update({ status }).eq('id', request.id)
@@ -186,6 +213,44 @@ export function Requests() {
             )}
           </button>
         ))}
+      </div>
+
+      <div className="pipeline-toolbar req-type-filters">
+        <select value={departmentFilter} onChange={(e) => setDepartmentFilter(e.target.value as DepartmentFilter)}>
+          <option value="tutti">Tutti i reparti</option>
+          {DEPARTMENTS.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
+        <select value={refTableFilter} onChange={(e) => setRefTableFilter(e.target.value as RefTableFilter)}>
+          <option value="tutti">Collegata a: tutte</option>
+          <option value="nessuno">Nessun record collegato</option>
+          {REQUEST_REF_TABLES.map((t) => (
+            <option key={t} value={t}>
+              {REQUEST_REF_LABELS[t]}
+            </option>
+          ))}
+        </select>
+        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}>
+          <option value="tutti">Interna o esterna: tutte</option>
+          <option value="interna">Interna</option>
+          <option value="esterna">Esterna</option>
+        </select>
+        {secondaryFiltersActive && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              setDepartmentFilter('tutti')
+              setRefTableFilter('tutti')
+              setTypeFilter('tutti')
+            }}
+          >
+            Azzera filtri
+          </button>
+        )}
       </div>
 
       {loading && <p className="muted">Caricamento…</p>}

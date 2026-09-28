@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { OwnGoalsPanel } from '../components/GoalsPanel'
+import { REQUEST_REF_LABELS, REQUEST_REF_TABLES, type RequestRefTable } from '../lib/refRecords'
 import {
   CLIENT_TYPE_LABELS,
   DEAL_STAGES,
@@ -15,6 +16,7 @@ import {
   type Profile,
   type PurchaseRequest,
   type Request,
+  type RequestDepartment,
   type ResearchRecord,
   type ResearchStatus,
   type Supplier,
@@ -30,6 +32,14 @@ const STATUS_COLOR: Record<string, string> = {
 
 const currency = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 const DEPARTMENTS = ['commerciale', 'tecnico', 'operativo', 'amministrazione', 'acquisti'] as const
+// Filtri per "tipo di richiesta" nella sezione Richieste qui sotto (richiesti
+// da Andrea, set 2026) — stessa idea combinabile della pagina Richieste:
+// reparto, a cosa è collegata (o a niente) e interna/esterna. Ristringono i
+// dati alla base di tutta la sezione (riquadri + grafici), non solo un
+// elenco a parte.
+type ReportDepartmentFilter = RequestDepartment | 'tutti'
+type ReportRefTableFilter = RequestRefTable | 'nessuno' | 'tutti'
+type ReportTypeFilter = 'interna' | 'esterna' | 'tutti'
 // "Reclamo Cliente" tolto dal 2026, non più tra le attività Acquisti proponibili — vedi PurchasePipeline.tsx.
 const ACTIVITY_TAGS = ['INCONTRO FORNITORE', 'RICHIESTA ANALISI CAMPIONE FORNITORE', 'RECLAMO FORNITORE', 'RIUNIONE INTERNA'] as const
 
@@ -206,6 +216,9 @@ export function Report() {
   const [targets, setTargets] = useState<AnnualTarget[]>([])
   const [loading, setLoading] = useState(true)
   const [targetYear, setTargetYear] = useState(new Date().getFullYear())
+  const [reqDepartmentFilter, setReqDepartmentFilter] = useState<ReportDepartmentFilter>('tutti')
+  const [reqRefTableFilter, setReqRefTableFilter] = useState<ReportRefTableFilter>('tutti')
+  const [reqTypeFilter, setReqTypeFilter] = useState<ReportTypeFilter>('tutti')
 
   // Ogni reparto vede i propri dati (più la direzione, che vede tutto) — le
   // stesse regole delle pagine dedicate (Pipeline, Ricerca&Sviluppo, Acquisti,
@@ -260,9 +273,25 @@ export function Report() {
   if (loading) return <div className="view"><p className="muted">Caricamento…</p></div>
 
   // ============ Richieste (generale, tutti i ruoli) ============
-
+  // "richiesteAperte" resta sui dati non filtrati: la usa anche il riquadro
+  // di sintesi della direzione più sopra, che non deve dipendere dai filtri
+  // per tipo qui sotto. I filtri (reparto, collegamento, interna/esterna) si
+  // applicano invece solo ai riquadri e ai grafici di QUESTA sezione
+  // ("requestsFiltered"), così si può isolare ad es. "solo acquisti" o "solo
+  // richieste esterne" per capire da dove arriva il carico.
   const richiesteAperte = requests.filter((r) => r.status !== 'risolta')
-  const risolte = requests.filter((r) => r.status === 'risolta')
+
+  const requestsFiltered = requests.filter((r) => {
+    if (reqDepartmentFilter !== 'tutti' && r.department !== reqDepartmentFilter) return false
+    if (reqRefTableFilter === 'nessuno' && r.ref_table) return false
+    if (reqRefTableFilter !== 'tutti' && reqRefTableFilter !== 'nessuno' && r.ref_table !== reqRefTableFilter) return false
+    if (reqTypeFilter !== 'tutti' && r.type !== reqTypeFilter) return false
+    return true
+  })
+  const reqFiltersActive = reqDepartmentFilter !== 'tutti' || reqRefTableFilter !== 'tutti' || reqTypeFilter !== 'tutti'
+
+  const richiesteAperteFiltrate = requestsFiltered.filter((r) => r.status !== 'risolta')
+  const risolte = requestsFiltered.filter((r) => r.status === 'risolta')
   const tempoMedioOre =
     risolte.length === 0
       ? null
@@ -277,12 +306,12 @@ export function Report() {
       : `${(tempoMedioOre / 24).toFixed(1)} giorni`
 
   const perReparto: BarRow[] = DEPARTMENTS.map((dep, i) => {
-    const count = requests.filter((r) => r.department === dep).length
+    const count = requestsFiltered.filter((r) => r.department === dep).length
     return { label: dep, value: count, formatted: String(count), color: CATEGORICAL[i % CATEGORICAL.length] }
   })
 
   const perStato: BarRow[] = (['nuova', 'lavorazione', 'risolta'] as const).map((st) => {
-    const count = requests.filter((r) => r.status === st).length
+    const count = requestsFiltered.filter((r) => r.status === st).length
     return { label: st, value: count, formatted: String(count), color: STATUS_COLOR[st] }
   })
 
@@ -477,10 +506,53 @@ export function Report() {
       <div className="view-head report-section-head">
         <h2>Richieste</h2>
       </div>
+      <div className="pipeline-toolbar req-type-filters">
+        <select
+          value={reqDepartmentFilter}
+          onChange={(e) => setReqDepartmentFilter(e.target.value as ReportDepartmentFilter)}
+        >
+          <option value="tutti">Tutti i reparti</option>
+          {DEPARTMENTS.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
+        <select
+          value={reqRefTableFilter}
+          onChange={(e) => setReqRefTableFilter(e.target.value as ReportRefTableFilter)}
+        >
+          <option value="tutti">Collegata a: tutte</option>
+          <option value="nessuno">Nessun record collegato</option>
+          {REQUEST_REF_TABLES.map((t) => (
+            <option key={t} value={t}>
+              {REQUEST_REF_LABELS[t]}
+            </option>
+          ))}
+        </select>
+        <select value={reqTypeFilter} onChange={(e) => setReqTypeFilter(e.target.value as ReportTypeFilter)}>
+          <option value="tutti">Interna o esterna: tutte</option>
+          <option value="interna">Interna</option>
+          <option value="esterna">Esterna</option>
+        </select>
+        {reqFiltersActive && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              setReqDepartmentFilter('tutti')
+              setReqRefTableFilter('tutti')
+              setReqTypeFilter('tutti')
+            }}
+          >
+            Azzera filtri
+          </button>
+        )}
+      </div>
       <div className="tile-row">
         <div className="card tile">
           <div className="tile-label">Richieste aperte</div>
-          <div className="tile-value">{richiesteAperte.length}</div>
+          <div className="tile-value">{richiesteAperteFiltrate.length}</div>
         </div>
         <div className="card tile">
           <div className="tile-label">Tempo medio di risposta</div>
