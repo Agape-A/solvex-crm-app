@@ -591,6 +591,20 @@ a.client-deal-row:hover { background: var(--surface-2); border-radius: 6px; }
 .chat-mode-toggle button + button { border-left: 1px solid var(--border); }
 .chat-mode-toggle button.active { background: var(--accent); color: #fff; }
 
+/* Avviso automatico di sistema in chat (nuova richiesta per il reparto) —
+   niente bolla, una riga sottile con icona, testo, link alla richiesta e
+   orario, per distinguerlo a colpo d'occhio dai messaggi scritti da una
+   persona. Richiesto da Andrea (set 2026), vedi Chat.tsx. */
+.chat-system-row {
+  display: flex; align-items: center; gap: 8px; padding: 7px 10px; border-radius: 9px;
+  background: var(--surface-2); font-size: 12.5px; color: var(--ink-2); align-self: center; max-width: 92%;
+}
+.chat-system-icon { flex: none; }
+.chat-system-body { flex: 1; min-width: 0; }
+.chat-system-link { flex: none; font-weight: 700; color: var(--accent); text-decoration: none; }
+.chat-system-link:hover { text-decoration: underline; }
+.chat-system-time { flex: none; font-size: 10.5px; color: var(--ink-3); }
+
 /* ---- marketing ---- */
 .marketing-export-row { justify-content: flex-end; align-items: center; margin-bottom: 10px; }
 .marketing-tag-filter { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); margin-right: auto; }
