@@ -37,13 +37,20 @@ export function hasFullAccess(role: UserRole | undefined): boolean {
 }
 export type DealStage = 'lead' | 'qualificato' | 'proposta' | 'trattativa' | 'vinto' | 'perso'
 export type RequestType = 'interna' | 'esterna'
-export type RequestDepartment = 'commerciale' | 'tecnico' | 'operativo' | 'amministrazione' | 'acquisti'
+export type RequestDepartment = 'commerciale' | 'tecnico' | 'operativo' | 'amministrazione' | 'acquisti' | 'ricerca'
 export type RequestPriority = 'alta' | 'media' | 'bassa'
 export type RequestStatus = 'nuova' | 'lavorazione' | 'risolta'
 export type AppointmentType = 'visita_commerciale' | 'sopralluogo_tecnico' | 'altro'
 export type ClientType = 'conceria' | 'distributore' | 'azienda_chimica'
 
-export const REQUEST_DEPARTMENTS: RequestDepartment[] = ['commerciale', 'tecnico', 'operativo', 'amministrazione', 'acquisti']
+export const REQUEST_DEPARTMENTS: RequestDepartment[] = [
+  'commerciale',
+  'tecnico',
+  'operativo',
+  'amministrazione',
+  'acquisti',
+  'ricerca',
+]
 export const REQUEST_PRIORITIES: RequestPriority[] = ['alta', 'media', 'bassa']
 
 export const CLIENT_TYPE_LABELS: Record<ClientType, string> = {
@@ -650,6 +657,7 @@ export const CHAT_CHANNEL_LABELS: Record<ChatChannel, string> = {
   operativo: 'Operativo',
   amministrazione: 'Amministrazione',
   acquisti: 'Acquisti',
+  ricerca: 'Ricerca&Sviluppo',
 }
 
 export interface ChatMessage {
