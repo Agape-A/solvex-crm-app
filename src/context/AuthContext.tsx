@@ -110,11 +110,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     let cancelled = false
 
     async function refresh() {
+      // "neq" da solo esclude anche i messaggi di sistema (author_id nullo,
+      // vedi 0033_chat_reparti.sql: l'avviso di nuova richiesta in un canale
+      // di reparto) perché in SQL "null <> x" non è vero né falso — quindi
+      // vanno inclusi esplicitamente con "or ... is.null", altrimenti
+      // comparirebbero in chat senza far salire il pallino di notifica.
       const { count } = await supabase
         .from('chat_messages')
         .select('id', { count: 'exact', head: true })
         .gt('created_at', seenAt)
-        .neq('author_id', myId)
+        .or(`author_id.neq.${myId},author_id.is.null`)
       if (!cancelled) setUnreadChatCount(count ?? 0)
     }
 
