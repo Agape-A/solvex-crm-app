@@ -314,7 +314,6 @@ export function Pipeline() {
             <div className="kanban-board">
               {DEAL_STAGES.map((stage) => {
                 const rows = filteredDeals.filter((d) => d.stage === stage.id).sort((a, b) => compareDeals(a, b, sortBy))
-                const total = rows.reduce((sum, d) => sum + Number(d.value_estimate), 0)
                 const rottingCount = rows.filter(isRotting).length
                 return (
                   <div
@@ -346,7 +345,6 @@ export function Pipeline() {
                       </span>
                       <span className="kanban-col-probability">{STAGE_PROBABILITY[stage.id]}%</span>
                     </div>
-                    <div className="kanban-col-total-row muted">{currency.format(total)}</div>
 
                     <div className="kanban-cards">
                       {rows.length === 0 && <p className="muted kanban-empty">Nessuna trattativa qui.</p>}
