@@ -38,6 +38,11 @@ export function Dashboard() {
   // le richieste/attività fornitore, non le trattative clienti) — su
   // richiesta di Andrea sparisce dalla sua dashboard.
   const showDealsTile = profile?.role !== 'ufficio_acquisti'
+  // Ricerca&Sviluppo per il momento non ha la pagina Richieste in menu (vedi
+  // Layout.tsx) — niente casella/avviso "Richieste" qui, altrimenti
+  // porterebbero a una pagina non più raggiungibile (richiesta di Andrea,
+  // set 2026).
+  const showRequestsTile = profile?.role !== 'dottore_laboratorio'
 
   useEffect(() => {
     // Il conteggio rispecchia solo ciò che la RLS permette di vedere al ruolo
@@ -102,7 +107,8 @@ export function Dashboard() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canSeePipeline, canSeeAppointments])
 
-  const hasAlerts = rottingDeals.length > 0 || dueRequests.length > 0 || todayAppointments.length > 0
+  const hasAlerts =
+    rottingDeals.length > 0 || (showRequestsTile && dueRequests.length > 0) || todayAppointments.length > 0
 
   return (
     <div className="view">
@@ -120,10 +126,12 @@ export function Dashboard() {
             <div className="tile-value">{dealsOpen ?? '—'}</div>
           </Link>
         )}
-        <Link to="/richieste" className="card tile">
-          <div className="tile-label">Richieste aperte</div>
-          <div className="tile-value">{requestsOpen ?? '—'}</div>
-        </Link>
+        {showRequestsTile && (
+          <Link to="/richieste" className="card tile">
+            <div className="tile-label">Richieste aperte</div>
+            <div className="tile-value">{requestsOpen ?? '—'}</div>
+          </Link>
+        )}
       </div>
 
       {profile && <OwnGoalsPanel userId={profile.id} year={new Date().getFullYear()} />}
@@ -146,7 +154,7 @@ export function Dashboard() {
                 ))}
               </Link>
             )}
-            {dueRequests.length > 0 && (
+            {showRequestsTile && dueRequests.length > 0 && (
               <Link to="/richieste" className="dash-alert-group">
                 <div className="dash-alert-head">
                   <span className="dash-alert-dot dash-alert-dot-warning" />
