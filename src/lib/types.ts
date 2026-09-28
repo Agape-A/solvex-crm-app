@@ -638,11 +638,28 @@ export interface RecordComment {
   created_at: string
 }
 
+// Canali della chat aziendale: "generale" (tutti) più un canale per ciascun
+// reparto della lista già usata per le richieste — stessa idea combinabile,
+// niente nuova tassonomia (richiesto da Andrea, set 2026).
+export type ChatChannel = RequestDepartment | 'generale'
+export const CHAT_CHANNELS: ChatChannel[] = ['generale', ...REQUEST_DEPARTMENTS]
+export const CHAT_CHANNEL_LABELS: Record<ChatChannel, string> = {
+  generale: 'Generale',
+  commerciale: 'Commerciale',
+  tecnico: 'Tecnico',
+  operativo: 'Operativo',
+  amministrazione: 'Amministrazione',
+  acquisti: 'Acquisti',
+}
+
 export interface ChatMessage {
   id: string
   author_id: string | null
   body: string
   created_at: string
+  channel: ChatChannel
+  ref_table: string | null
+  ref_id: string | null
 }
 
 // ============ Obiettivi annuali (impostati dalla direzione) ============
