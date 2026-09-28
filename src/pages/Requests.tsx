@@ -8,7 +8,7 @@ import { describeRef, refLinkPath, REQUEST_REF_LABELS, REQUEST_REF_TABLES, type 
 import { type Client, type Profile, type Request, type RequestDepartment, type RequestPriority, type RequestStatus } from '../lib/types'
 
 const STATUSES: RequestStatus[] = ['nuova', 'lavorazione', 'risolta']
-const DEPARTMENTS: RequestDepartment[] = ['commerciale', 'tecnico', 'operativo', 'amministrazione', 'acquisti']
+const DEPARTMENTS: RequestDepartment[] = ['commerciale', 'tecnico', 'operativo', 'amministrazione', 'acquisti', 'ricerca']
 const PRIORITIES: RequestPriority[] = ['alta', 'media', 'bassa']
 
 // Filtro per stato in testata, come una scheda separata per ciascuno stato:

@@ -31,7 +31,7 @@ const STATUS_COLOR: Record<string, string> = {
 }
 
 const currency = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
-const DEPARTMENTS = ['commerciale', 'tecnico', 'operativo', 'amministrazione', 'acquisti'] as const
+const DEPARTMENTS = ['commerciale', 'tecnico', 'operativo', 'amministrazione', 'acquisti', 'ricerca'] as const
 // Filtri per "tipo di richiesta" nella sezione Richieste qui sotto (richiesti
 // da Andrea, set 2026) — stessa idea combinabile della pagina Richieste:
 // reparto, a cosa è collegata (o a niente) e interna/esterna. Ristringono i
