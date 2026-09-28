@@ -119,7 +119,15 @@ export function Requests() {
     const request = requests.find((r) => r.id === fromLink)
     if (request) {
       setSelected(request)
-      setStatusFilter('tutte') // altrimenti, se lo stato non corrisponde alla scheda attiva, sparirebbe dall'elenco
+      // Azzera anche i filtri di reparto/collegamento/interna-esterna, non
+      // solo lo stato: altrimenti un link "da fuori" (es. l'avviso 🔔 in
+      // Chat per una richiesta di un altro reparto) apre la scheda ma la
+      // riga resta nascosta/non evidenziata nell'elenco sotto perché non
+      // corrisponde ai filtri attivi in quel momento.
+      setStatusFilter('tutte')
+      setDepartmentFilter('tutti')
+      setRefTableFilter('tutti')
+      setTypeFilter('tutti')
     }
     setSearchParams({}, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
