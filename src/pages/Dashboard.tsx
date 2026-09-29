@@ -28,16 +28,21 @@ export function Dashboard() {
   const [dueRequests, setDueRequests] = useState<Request[]>([])
   const [todayAppointments, setTodayAppointments] = useState<Appointment[]>([])
   const [activity, setActivity] = useState<ActivityLogEntry[]>([])
-  const [researchOpen, setResearchOpen] = useState<number | null>(null)
-  const [suppliersCount, setSuppliersCount] = useState<number | null>(null)
 
-  const canSeePipeline = profile ? ['tecnico', 'commerciale', 'dirigente', 'amministrazione'].includes(profile.role) : false
-  const canSeeAppointments = canSeePipeline
-  // Ricerca&Sviluppo e Ufficio acquisti non hanno una "Pipeline clienti":
-  // la prima tile della riga in alto diventa quindi qualcosa di pertinente
-  // al loro reparto invece di un link morto a una pagina che non vedono.
-  const isResearch = profile?.role === 'dottore_laboratorio'
-  const isAcquisti = profile?.role === 'ufficio_acquisti'
+  const canSeePipeline = profile ? ['tecnico', 'commerciale', 'dirigente'].includes(profile.role) : false
+  // L'ufficio acquisti non vede la pipeline trattative (non è di sua
+  // competenza), ma vede comunque il calendario appuntamenti — vedi anche
+  // Calendar.tsx, canSeeAppointments.
+  const canSeeAppointments = canSeePipeline || profile?.role === 'ufficio_acquisti'
+  // La casella "Trattative aperte" non riguarda l'ufficio acquisti (segue
+  // le richieste/attività fornitore, non le trattative clienti) — su
+  // richiesta di Andrea sparisce dalla sua dashboard.
+  const showDealsTile = profile?.role !== 'ufficio_acquisti'
+  // Ricerca&Sviluppo per il momento non ha la pagina Richieste in menu (vedi
+  // Layout.tsx) — niente casella/avviso "Richieste" qui, altrimenti
+  // porterebbero a una pagina non più raggiungibile (richiesta di Andrea,
+  // set 2026).
+  const showRequestsTile = profile?.role !== 'dottore_laboratorio'
 
   useEffect(() => {
     // Il conteggio rispecchia solo ciò che la RLS permette di vedere al ruolo
@@ -99,25 +104,11 @@ export function Dashboard() {
         .order('appointment_at')
         .then(({ data }) => setTodayAppointments((data as Appointment[]) ?? []))
     }
-
-    if (isResearch) {
-      supabase
-        .from('research_records')
-        .select('id', { count: 'exact', head: true })
-        .eq('status', 'in_corso')
-        .then(({ count }) => setResearchOpen(count ?? 0))
-    }
-
-    if (isAcquisti) {
-      supabase
-        .from('suppliers')
-        .select('id', { count: 'exact', head: true })
-        .then(({ count }) => setSuppliersCount(count ?? 0))
-    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canSeePipeline, isResearch, isAcquisti])
+  }, [canSeePipeline, canSeeAppointments])
 
-  const hasAlerts = rottingDeals.length > 0 || dueRequests.length > 0 || todayAppointments.length > 0
+  const hasAlerts =
+    rottingDeals.length > 0 || (showRequestsTile && dueRequests.length > 0) || todayAppointments.length > 0
 
   return (
     <div className="view">
@@ -129,28 +120,18 @@ export function Dashboard() {
       </div>
 
       <div className="tile-row">
-        {isResearch && (
-          <Link to="/ricerche" className="card tile">
-            <div className="tile-label">Ricerche in corso</div>
-            <div className="tile-value">{researchOpen ?? '—'}</div>
-          </Link>
-        )}
-        {isAcquisti && (
-          <Link to="/fornitori" className="card tile">
-            <div className="tile-label">Fornitori in anagrafica</div>
-            <div className="tile-value">{suppliersCount ?? '—'}</div>
-          </Link>
-        )}
-        {!isResearch && !isAcquisti && (
+        {showDealsTile && (
           <Link to="/pipeline" className="card tile">
             <div className="tile-label">Trattative aperte</div>
             <div className="tile-value">{dealsOpen ?? '—'}</div>
           </Link>
         )}
-        <Link to="/richieste" className="card tile">
-          <div className="tile-label">Richieste aperte</div>
-          <div className="tile-value">{requestsOpen ?? '—'}</div>
-        </Link>
+        {showRequestsTile && (
+          <Link to="/richieste" className="card tile">
+            <div className="tile-label">Richieste aperte</div>
+            <div className="tile-value">{requestsOpen ?? '—'}</div>
+          </Link>
+        )}
       </div>
 
       {profile && <OwnGoalsPanel userId={profile.id} year={new Date().getFullYear()} />}
@@ -173,7 +154,7 @@ export function Dashboard() {
                 ))}
               </Link>
             )}
-            {dueRequests.length > 0 && (
+            {showRequestsTile && dueRequests.length > 0 && (
               <Link to="/richieste" className="dash-alert-group">
                 <div className="dash-alert-head">
                   <span className="dash-alert-dot dash-alert-dot-warning" />

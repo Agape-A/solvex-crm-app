@@ -30,11 +30,14 @@ import {
 //   operatore/tecnico/commerciale → lato clienti (Pipeline clienti,
 //     Clienti, Richieste, Marketing); tecnico e commerciale anche
 //     Calendario.
-//   dottore_laboratorio (Ricerca&Sviluppo) → solo le proprie Richieste
-//     (quelle assegnate a lui/lei), la pagina Ricerca&Sviluppo, Calendario
-//     (solo le proprie scadenze/appuntamenti).
-//   ufficio_acquisti → Pipeline acquisti, Fornitori, Calendario (idem, solo
-//     proprio).
+//   dottore_laboratorio (Ricerca&Sviluppo) → per il momento solo la pagina
+//     Ricerca&Sviluppo e Calendario (solo le proprie scadenze/appuntamenti) —
+//     niente Richieste/Report per ora (richiesta di Andrea, set 2026, vedi
+//     anche 0034/0035_reparto_ricerca*.sql: il reparto "ricerca" esiste già
+//     lato dati, per quando in futuro queste pagine verranno riaperte).
+//   ufficio_acquisti → Pipeline acquisti, Fornitori, Richieste (le proprie
+//     e quelle del reparto "acquisti" — vedi 0030_richieste_calendario_acquisti.sql),
+//     Calendario (idem, solo proprio).
 // Dashboard e Chat restano visibili a chiunque sia autenticato.
 // "badgeKey" facoltativo: mostra il pallino rosso di notifica preso da
 // useAuth() (vedi AuthContext.tsx e 0029_notifiche_badge.sql).
@@ -47,7 +50,7 @@ const NAV: { to: string; label: string; icon: typeof IconDashboard; roles?: User
     label: 'Richieste',
     icon: IconRequests,
     badgeKey: 'richieste',
-    roles: ['operatore', 'tecnico', 'commerciale', 'dottore_laboratorio'],
+    roles: ['operatore', 'tecnico', 'commerciale', 'ufficio_acquisti'],
   },
   { to: '/ricerche', label: 'Ricerca&Sviluppo', icon: IconResearch, roles: ['dottore_laboratorio'] },
   { to: '/fornitori', label: 'Fornitori', icon: IconSuppliers, roles: ['ufficio_acquisti'] },
@@ -63,7 +66,7 @@ const NAV: { to: string; label: string; icon: typeof IconDashboard; roles?: User
     to: '/report',
     label: 'Report e analytics',
     icon: IconReport,
-    roles: ['operatore', 'tecnico', 'commerciale', 'dottore_laboratorio', 'ufficio_acquisti'],
+    roles: ['operatore', 'tecnico', 'commerciale', 'ufficio_acquisti'],
   },
   { to: '/chat', label: 'Chat', icon: IconChat, badgeKey: 'chat' },
   { to: '/utenti', label: 'Utenti', icon: IconUsers, roles: ['dirigente', 'amministrazione'] },

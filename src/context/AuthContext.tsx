@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabaseClient'
-import type { Profile } from '../lib/types'
+import type { ChatChannel, Profile } from '../lib/types'
 
 interface AuthState {
   session: Session | null
@@ -11,7 +11,7 @@ interface AuthState {
   signOut: () => Promise<void>
   unreadChatCount: number
   newRequestsCount: number
-  markChatSeen: () => Promise<void>
+  markChatSeen: (channel: ChatChannel) => Promise<void>
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined)
@@ -95,27 +95,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [profile?.id, profile?.role, profile?.department])
 
   // ============ Notifiche: pallino su "Chat" ============
-  // Conta i messaggi arrivati da altri dopo l'ultima visita alla pagina Chat
-  // (profile.chat_last_seen_at, colonna aggiunta in
-  // 0029_notifiche_badge.sql). Si risottoscrive ogni volta che
-  // chat_last_seen_at cambia, così dopo markChatSeen() riparte dal punto giusto.
+  // "Visto l'ultima volta" è per canale (chat_channel_reads, vedi
+  // 0036_notifiche_semplici.sql), non un solo orario per tutta la chat come
+  // prima: aprire un canale non segna più come letti anche gli altri canali
+  // mai aperti — motivo per cui il pallino sembrava sparire "da solo" senza
+  // che l'utente avesse davvero letto tutto. Il conteggio (funzione
+  // unread_chat_count lato database) esclude anche gli avvisi di sistema
+  // (autore nullo): questo numero significa solo "messaggi di persone non
+  // ancora letti", mai richieste — quelle hanno il proprio pallino su
+  // "Richieste" (richiesta di Andrea, set 2026: un significato solo per
+  // ciascun numero).
 
   useEffect(() => {
     if (!profile) {
       setUnreadChatCount(0)
       return
     }
-    const myId = profile.id
-    const seenAt = profile.chat_last_seen_at
     let cancelled = false
 
     async function refresh() {
-      const { count } = await supabase
-        .from('chat_messages')
-        .select('id', { count: 'exact', head: true })
-        .gt('created_at', seenAt)
-        .neq('author_id', myId)
-      if (!cancelled) setUnreadChatCount(count ?? 0)
+      const { data, error } = await supabase.rpc('unread_chat_count')
+      if (!cancelled && !error) setUnreadChatCount((data as number) ?? 0)
     }
 
     refresh()
@@ -129,15 +129,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       cancelled = true
       supabase.removeChannel(channel)
     }
-  }, [profile?.id, profile?.chat_last_seen_at])
+  }, [profile?.id, profile?.role, profile?.department])
 
-  async function markChatSeen() {
+  async function markChatSeen(channel: ChatChannel) {
     if (!profile) return
-    const nowIso = new Date().toISOString()
-    setUnreadChatCount(0)
-    setProfile((p) => (p ? { ...p, chat_last_seen_at: nowIso } : p))
-    const { error } = await supabase.from('profiles').update({ chat_last_seen_at: nowIso }).eq('id', profile.id)
-    if (error) console.error('Impossibile aggiornare ultima visita chat', error)
+    const { error } = await supabase
+      .from('chat_channel_reads')
+      .upsert({ profile_id: profile.id, channel, last_seen_at: new Date().toISOString() })
+    if (error) {
+      console.error('Impossibile aggiornare ultima visita al canale', error)
+      return
+    }
+    const { data } = await supabase.rpc('unread_chat_count')
+    setUnreadChatCount((data as number) ?? 0)
   }
 
   async function signInWithOtp(email: string) {

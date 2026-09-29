@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent, type FormEvent, type ReactNode } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
+import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { CommentThread } from '../components/CommentThread'
@@ -7,151 +7,81 @@ import { ActivityAssignment, createActivityAssignments } from '../components/Act
 import {
   INCONTRO_TIPO_LABELS,
   NATURA_RECLAMO_LABELS,
-  PURCHASE_STATUSES,
-  PURCHASE_STATUS_LABELS,
   REPARTI_RIUNIONE,
   RICEZIONE_RECLAMO_LABELS,
   TIPO_ANALISI_LABELS,
   URGENZA_LABELS,
-  type Client,
   type IncontroTipo,
   type NaturaReclamo,
   type PendingAssignment,
   type ProcurementActivity,
   type ProcurementActivityDetails,
   type Profile,
-  type PurchaseRequest,
-  type PurchaseStatus,
+  type Request,
+  type RequestStatus,
   type RicezioneReclamo,
   type Supplier,
   type TipoAnalisi,
   type Urgenza,
 } from '../lib/types'
 
-// Pipeline acquisti, ridisegnata (set 2026) sullo stesso schema della
-// Pipeline clienti: "+ Nuova richiesta" apre subito il form guidato con i 4
-// tipi attività dello "Schema Nuova Pipeline Acquisti" di Andrea (Visita
-// Fornitore, Reclamo Fornitore, Reclamo Cliente, Riunione Interna) — il
-// fornitore o il cliente si sceglie nel form stesso, non serve aprire prima
-// una scheda specifica. Le attività vivono in procurement_activities (ex
-// "supplier_activities" — vedi 0021_pipeline_acquisti_attivita.sql), non
-// nella tabella purchase_requests: non seguono uno stato d'ordine.
+// Pipeline acquisti, ridisegnata (set 2026, poi allineata definitivamente
+// alla Pipeline clienti su richiesta esplicita di Andrea): "+ Nuova
+// richiesta" apre il form guidato con i 4 tipi attività (Incontro
+// Fornitore, Richiesta Analisi Campione Fornitore, Reclamo Fornitore,
+// Riunione Interna) — il fornitore si sceglie nel form stesso. Ogni
+// attività registrata vive in procurement_activities (ex
+// "supplier_activities" — vedi 0021_pipeline_acquisti_attivita.sql) E genera
+// una riga collegata in "requests" (reparto "acquisti"), che segue lo stato
+// Nuova → In lavorazione → Risolta: è questa bacheca, non un elenco per
+// data, la vista principale della pagina — stessa idea della Pipeline
+// clienti, dove ogni attività diventa una scheda nella bacheca a colonne.
 //
 // La vecchia bacheca a colonne (prezzo unitario, quantità, stato
-// da_inviare→ricevuta — 0014_pipeline_acquisti.sql) resta sotto come
-// archivio delle richieste create prima di questo aggiornamento: restano
-// consultabili e aggiornabili, ma da "+ Nuova richiesta" non se ne creano
-// più di nuove — non era nello schema di Andrea. Visibile solo a
-// "ufficio_acquisti" e "dirigente" — vedi 0013_moduli_ruoli.sql.
-const CAN_ACCESS = ['ufficio_acquisti', 'dirigente', 'amministrazione']
-
-const currency = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
-
-// "Ferma da tempo": come nella Pipeline clienti, se una richiesta aperta non
-// viene toccata da più di ROTTING_DAYS giorni la evidenziamo.
-const ROTTING_DAYS = 14
-const OPEN_STATUSES: string[] = ['da_inviare', 'inviata', 'confermata']
-// Il percorso "sano" di una richiesta, senza "annullata" (un'uscita, non uno
-// step) — usato per lo stepper Path e per il pulsante di avanzamento rapido.
-const PATH_STATUSES: PurchaseStatus[] = ['da_inviare', 'inviata', 'confermata', 'ricevuta']
-
-function nextPathStatus(status: PurchaseStatus): PurchaseStatus | null {
-  const idx = PATH_STATUSES.indexOf(status)
-  if (idx === -1 || idx === PATH_STATUSES.length - 1) return null
-  return PATH_STATUSES[idx + 1]
-}
-
-function statusLabel(status: PurchaseStatus): string {
-  return PURCHASE_STATUS_LABELS[status] ?? status
-}
-
-function daysSince(dateStr: string): number {
-  return Math.floor((Date.now() - new Date(dateStr).getTime()) / 86_400_000)
-}
-
-function isRotting(request: PurchaseRequest): boolean {
-  return OPEN_STATUSES.includes(request.status) && daysSince(request.updated_at) > ROTTING_DAYS
-}
+// da_inviare→ricevuta — 0014_pipeline_acquisti.sql, tabella
+// "purchase_requests") non è più la vista di questa pagina: le richieste
+// create prima di questo aggiornamento restano nel database, consultabili
+// via Supabase, ma "+ Nuova richiesta" da oggi crea solo attività con la
+// bacheca per stato qui sotto. Pagina visibile solo a "ufficio_acquisti" e
+// "dirigente" — vedi 0013_moduli_ruoli.sql.
+const CAN_ACCESS = ['ufficio_acquisti', 'dirigente']
 
 function isOverdue(dateStr: string): boolean {
   return new Date(dateStr) < new Date(new Date().toDateString())
 }
 
-function estimatedValue(request: PurchaseRequest): number {
-  return Number(request.unit_price ?? 0) * Number(request.quantity ?? 0)
-}
-
-type SortKey = 'recenti' | 'valore_desc' | 'valore_asc' | 'scadenza' | 'ferme'
-
-const SORT_OPTIONS: { id: SortKey; label: string }[] = [
-  { id: 'recenti', label: 'Più recenti' },
-  { id: 'valore_desc', label: 'Valore (dal più alto)' },
-  { id: 'valore_asc', label: 'Valore (dal più basso)' },
-  { id: 'scadenza', label: 'Scadenza' },
-  { id: 'ferme', label: 'Ferme da più tempo' },
-]
-
-function compareRequests(a: PurchaseRequest, b: PurchaseRequest, sortBy: SortKey): number {
-  switch (sortBy) {
-    case 'valore_desc':
-      return estimatedValue(b) - estimatedValue(a)
-    case 'valore_asc':
-      return estimatedValue(a) - estimatedValue(b)
-    case 'scadenza': {
-      if (a.due_date && b.due_date) return new Date(a.due_date).getTime() - new Date(b.due_date).getTime()
-      if (a.due_date) return -1
-      if (b.due_date) return 1
-      return 0
-    }
-    case 'ferme':
-      return daysSince(b.updated_at) - daysSince(a.updated_at)
-    case 'recenti':
-    default:
-      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  }
+// Bacheca divisa per stato per le "richieste" del reparto acquisti — ogni
+// attività della Pipeline acquisti ne genera una (vedi handleSubmit in
+// NewProcurementActivityForm): Andrea aveva segnalato che nella Pipeline
+// acquisti "non ci sono le giuste divisioni in base allo stato" — questa
+// bacheca mostra Nuova/Lavorazione/Risolta direttamente qui, oltre che
+// nella pagina "Richieste".
+const ACQUISTI_REQUEST_STATUSES: RequestStatus[] = ['nuova', 'lavorazione', 'risolta']
+const ACQUISTI_REQUEST_STATUS_LABELS: Record<RequestStatus, string> = {
+  nuova: 'Nuova',
+  lavorazione: 'In lavorazione',
+  risolta: 'Risolta',
 }
 
 export function PurchasePipeline() {
   const { profile } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
-  const [requests, setRequests] = useState<PurchaseRequest[]>([])
   const [suppliers, setSuppliers] = useState<Supplier[]>([])
-  const [clients, setClients] = useState<Client[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [activities, setActivities] = useState<ProcurementActivity[]>([])
   const [activitiesLoading, setActivitiesLoading] = useState(true)
+  const [acquistiRequests, setAcquistiRequests] = useState<Request[]>([])
+  const [acquistiRequestsLoading, setAcquistiRequestsLoading] = useState(true)
   const [showActivityForm, setShowActivityForm] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [draggedId, setDraggedId] = useState<string | null>(null)
-  const [dragOverStatus, setDragOverStatus] = useState<PurchaseStatus | null>(null)
-  const [savingId, setSavingId] = useState<string | null>(null)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [highlightedId, setHighlightedId] = useState<string | null>(null)
-  const [view, setView] = useState<'kanban' | 'list'>('kanban')
-  const [search, setSearch] = useState('')
-  const [supplierFilter, setSupplierFilter] = useState('')
-  const [sortBy, setSortBy] = useState<SortKey>('recenti')
 
   const canAccess = profile ? CAN_ACCESS.includes(profile.role) : false
-
-  async function loadRequests() {
-    setLoading(true)
-    const { data, error } = await supabase.from('purchase_requests').select('*').order('created_at', { ascending: false })
-    if (error) console.error(error)
-    setRequests((data as PurchaseRequest[]) ?? [])
-    setLoading(false)
-  }
 
   async function loadSuppliers() {
     const { data, error } = await supabase.from('suppliers').select('*').order('name')
     if (error) console.error(error)
     setSuppliers((data as Supplier[]) ?? [])
-  }
-
-  async function loadClients() {
-    const { data, error } = await supabase.from('clients').select('*').order('name')
-    if (error) console.error(error)
-    setClients((data as Client[]) ?? [])
   }
 
   async function loadActivities() {
@@ -165,16 +95,32 @@ export function PurchasePipeline() {
     setActivitiesLoading(false)
   }
 
+  // Richieste del reparto "acquisti", una per ogni attività registrata
+  // (vedi handleSubmit in NewProcurementActivityForm): sono la bacheca
+  // principale di questa pagina — la RLS
+  // (0030_richieste_calendario_acquisti.sql) limita già ciò che
+  // ufficio_acquisti/dirigente possono vedere.
+  async function loadAcquistiRequests() {
+    setAcquistiRequestsLoading(true)
+    const { data, error } = await supabase
+      .from('requests')
+      .select('*')
+      .eq('department', 'acquisti')
+      .order('created_at', { ascending: false })
+    if (error) console.error(error)
+    setAcquistiRequests((data as Request[]) ?? [])
+    setAcquistiRequestsLoading(false)
+  }
+
   useEffect(() => {
     if (!canAccess) {
-      setLoading(false)
       setActivitiesLoading(false)
+      setAcquistiRequestsLoading(false)
       return
     }
-    loadRequests()
     loadSuppliers()
-    loadClients()
     loadActivities()
+    loadAcquistiRequests()
     supabase
       .from('profiles')
       .select('*')
@@ -182,19 +128,37 @@ export function PurchasePipeline() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canAccess])
 
+  // Notifiche "live": se arriva una nuova richiesta acquisti o un'altra
+  // persona ne cambia lo stato, la bacheca (e i pallini sulle colonne/righe
+  // qui sotto) si aggiornano subito, senza dover ricaricare la pagina —
+  // richiesto da Andrea (set 2026), stesso canale già usato per il pallino
+  // sulla casella "Richieste" del menu (vedi AuthContext.tsx).
+  useEffect(() => {
+    if (!canAccess) return
+    const channel = supabase
+      .channel('acquisti_requests_live')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'requests', filter: 'department=eq.acquisti' },
+        () => loadAcquistiRequests(),
+      )
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canAccess])
+
   // Deep-link (es. dalla scheda di un fornitore) — evidenzia e scorre fino
-  // alla richiesta indicata, azzerando filtri/vista che potrebbero nasconderla.
+  // alla richiesta indicata.
   useEffect(() => {
     const fromLink = searchParams.get('richiesta')
-    if (!fromLink || requests.length === 0) return
-    setView('kanban')
-    setSearch('')
-    setSupplierFilter('')
+    if (!fromLink || acquistiRequests.length === 0) return
     setExpandedId(fromLink)
     setHighlightedId(fromLink)
     setSearchParams({}, { replace: true })
     const timeout = setTimeout(() => {
-      document.getElementById('request-' + fromLink)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      document.getElementById('acquisti-request-' + fromLink)?.scrollIntoView({ behavior: 'smooth', block: 'center' })
     }, 50)
     const clearHighlight = setTimeout(() => setHighlightedId(null), 3000)
     return () => {
@@ -202,42 +166,34 @@ export function PurchasePipeline() {
       clearTimeout(clearHighlight)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchParams, requests])
+  }, [searchParams, acquistiRequests])
 
-  async function updateStatus(request: PurchaseRequest, status: PurchaseStatus) {
+  async function updateAcquistiRequestStatus(request: Request, status: RequestStatus) {
     if (request.status === status) return
-    setSavingId(request.id)
-    setRequests((current) => current.map((r) => (r.id === request.id ? { ...r, status } : r)))
-    const { error } = await supabase.from('purchase_requests').update({ status }).eq('id', request.id)
-    setSavingId(null)
+    setAcquistiRequests((current) => current.map((r) => (r.id === request.id ? { ...r, status } : r)))
+    const { error } = await supabase.from('requests').update({ status }).eq('id', request.id)
     if (error) {
       alert('Non è stato possibile aggiornare lo stato: ' + error.message)
-      loadRequests()
+      loadAcquistiRequests()
     }
-  }
-
-  async function updateField(request: PurchaseRequest, patch: Partial<PurchaseRequest>) {
-    const { error } = await supabase.from('purchase_requests').update(patch).eq('id', request.id)
-    if (error) {
-      alert('Non è stato possibile salvare la modifica: ' + error.message)
-      return
-    }
-    setRequests((rs) => rs.map((r) => (r.id === request.id ? { ...r, ...patch } : r)))
   }
 
   const supplierMap = useMemo(() => new Map(suppliers.map((s) => [s.id, s])), [suppliers])
-  const clientMap = useMemo(() => new Map(clients.map((c) => [c.id, c])), [clients])
-  const requesterMap = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles])
 
-  const filteredRequests = useMemo(() => {
-    const q = search.trim().toLowerCase()
-    return requests.filter((r) => {
-      const supplierName = supplierMap.get(r.supplier_id)?.name ?? ''
-      if (q && !(supplierName.toLowerCase().includes(q) || r.subject.toLowerCase().includes(q))) return false
-      if (supplierFilter && r.supplier_id !== supplierFilter) return false
-      return true
-    })
-  }, [requests, search, supplierFilter, supplierMap])
+  // La richiesta collegata non ha un campo fornitore proprio: lo risolve
+  // passando dall'attività a cui è agganciata (ref_table/ref_id — vedi
+  // handleSubmit in NewProcurementActivityForm).
+  function acquistiRequestSupplierName(r: Request): string | undefined {
+    if (r.ref_table !== 'procurement_activities' || !r.ref_id) return undefined
+    const activity = activities.find((a) => a.id === r.ref_id)
+    if (!activity?.supplier_id) return undefined
+    return supplierMap.get(activity.supplier_id)?.name
+  }
+
+  function acquistiRequestActivity(r: Request): ProcurementActivity | undefined {
+    if (r.ref_table !== 'procurement_activities' || !r.ref_id) return undefined
+    return activities.find((a) => a.id === r.ref_id)
+  }
 
   if (!profile) return null
 
@@ -262,518 +218,97 @@ export function PurchasePipeline() {
       {showActivityForm && (
         <NewProcurementActivityForm
           suppliers={suppliers}
-          clients={clients}
           assignees={profiles}
           createdByName={profile.full_name}
-          onCreated={() => { setShowActivityForm(false); loadActivities() }}
+          onCreated={() => { setShowActivityForm(false); loadActivities(); loadAcquistiRequests() }}
         />
       )}
 
-      {activitiesLoading && <p className="muted">Caricamento…</p>}
-      {!activitiesLoading && activities.length === 0 && !showActivityForm && (
-        <p className="muted">Nessuna richiesta registrata ancora.</p>
-      )}
-      {!activitiesLoading && activities.length > 0 && (
-        <div className="client-deals-list procurement-activities-list">
-          {activities.map((a) => (
-            <ProcurementActivityRow
-              key={a.id}
-              activity={a}
-              supplierName={a.supplier_id ? supplierMap.get(a.supplier_id)?.name : undefined}
-              clientName={a.client_id ? clientMap.get(a.client_id)?.name : undefined}
-            />
-          ))}
-        </div>
-      )}
-
-      <div className="section-title client-deals-title">Richieste d'acquisto (archivio)</div>
       <p className="muted">
-        Le richieste d'acquisto con prezzo, quantità e stato dell'ordine create prima di questo aggiornamento restano
-        qui, consultabili e aggiornabili — da oggi le nuove richieste si creano con "+ Nuova richiesta" sopra.
+        Ogni attività registrata (Incontro Fornitore, Richiesta Analisi Campione Fornitore, Reclamo Fornitore,
+        Riunione Interna) genera qui una scheda che segue lo stato Nuova → In lavorazione → Risolta — la stessa
+        bacheca che trovi anche nella pagina "Richieste".
       </p>
 
-      {loading && <p className="muted">Caricamento…</p>}
-
-      {!loading && (
-        <>
-          <div className="pipeline-toolbar">
-            <input
-              className="pipeline-search-input"
-              placeholder="Cerca fornitore o oggetto…"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-            <select value={supplierFilter} onChange={(e) => setSupplierFilter(e.target.value)}>
-              <option value="">Tutti i fornitori</option>
-              {suppliers.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortKey)}>
-              {SORT_OPTIONS.map((o) => (
-                <option key={o.id} value={o.id}>
-                  Ordina: {o.label}
-                </option>
-              ))}
-            </select>
-            <div className="pipeline-view-toggle">
-              <button type="button" className={view === 'kanban' ? 'active' : ''} onClick={() => setView('kanban')}>
-                Bacheca
-              </button>
-              <button type="button" className={view === 'list' ? 'active' : ''} onClick={() => setView('list')}>
-                Elenco
-              </button>
-            </div>
-          </div>
-
-          {filteredRequests.length === 0 && <p className="muted">Nessuna richiesta corrisponde ai filtri selezionati.</p>}
-
-          {filteredRequests.length > 0 && view === 'kanban' && (
-            <div className="kanban-board">
-              {PURCHASE_STATUSES.map((status) => {
-                const rows = filteredRequests.filter((r) => r.status === status.id).sort((a, b) => compareRequests(a, b, sortBy))
-                const total = rows.reduce((sum, r) => sum + estimatedValue(r), 0)
-                const rottingCount = rows.filter(isRotting).length
-                return (
-                  <div
-                    key={status.id}
-                    className={'kanban-col' + (dragOverStatus === status.id ? ' drag-over' : '')}
-                    onDragOver={(e) => {
-                      if (!draggedId) return
-                      e.preventDefault()
-                      setDragOverStatus(status.id)
-                    }}
-                    onDragLeave={() => setDragOverStatus((s) => (s === status.id ? null : s))}
-                    onDrop={(e) => {
-                      e.preventDefault()
-                      setDragOverStatus(null)
-                      const id = e.dataTransfer.getData('text/plain')
-                      const request = requests.find((r) => r.id === id)
-                      if (request) updateStatus(request, status.id)
-                    }}
-                  >
-                    <div className="kanban-col-head">
-                      <span>
-                        {status.label} <span className="muted">· {rows.length}</span>
-                        {rottingCount > 0 && (
-                          <span className="kanban-rotting-badge" title={`${rottingCount} ferma/e da più di ${ROTTING_DAYS} giorni`}>
-                            {rottingCount}
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    <div className="kanban-col-total-row muted">{currency.format(total)}</div>
-
-                    <div className="kanban-cards">
-                      {rows.length === 0 && <p className="muted kanban-empty">Nessuna richiesta qui.</p>}
-                      {rows.map((request) => (
-                        <RequestCard
-                          key={request.id}
-                          request={request}
-                          supplier={supplierMap.get(request.supplier_id)}
-                          requester={request.requested_by ? requesterMap.get(request.requested_by) : undefined}
-                          rotting={isRotting(request)}
-                          dragging={draggedId === request.id}
-                          saving={savingId === request.id}
-                          highlighted={highlightedId === request.id}
-                          expanded={expandedId === request.id}
-                          requesters={profiles}
-                          onToggleExpand={() => setExpandedId((id) => (id === request.id ? null : request.id))}
-                          onDragStart={(e) => {
-                            e.dataTransfer.setData('text/plain', request.id)
-                            e.dataTransfer.effectAllowed = 'move'
-                            setDraggedId(request.id)
-                          }}
-                          onDragEnd={() => {
-                            setDraggedId(null)
-                            setDragOverStatus(null)
-                          }}
-                          onChangeStatus={(s) => updateStatus(request, s)}
-                          onChangeField={(patch) => updateField(request, patch)}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
-
-          {filteredRequests.length > 0 && view === 'list' && (
-            <div className="pipeline-list">
-              <div className="pipeline-list-head">
-                <span className="pcol-client">Fornitore / oggetto</span>
-                <span className="pcol-stage">Stato</span>
-                <button type="button" className="pcol-value" onClick={() => setSortBy('valore_desc')}>
-                  Valore
-                </button>
-                <span className="pcol-owner">Rich.</span>
-                <button type="button" className="pcol-action" onClick={() => setSortBy('scadenza')}>
-                  Scadenza
-                </button>
-                <span className="pcol-expand" />
+      {(activitiesLoading || acquistiRequestsLoading) && <p className="muted">Caricamento…</p>}
+      {!activitiesLoading && !acquistiRequestsLoading && acquistiRequests.length === 0 && !showActivityForm && (
+        <p className="muted">Nessuna richiesta registrata ancora.</p>
+      )}
+      {!activitiesLoading && !acquistiRequestsLoading && acquistiRequests.length > 0 && (
+        <div className="kanban-board">
+          {ACQUISTI_REQUEST_STATUSES.map((status) => {
+            const rows = acquistiRequests.filter((r) => r.status === status)
+            return (
+              <div key={status} className="kanban-col">
+                <div className="kanban-col-head">
+                  <span>
+                    {ACQUISTI_REQUEST_STATUS_LABELS[status]}
+                    {/* Rosso solo su "Nuova" — "In lavorazione" è un
+                        conteggio normale, non un avviso (stessa logica di
+                        Requests.tsx: richiesta di Andrea, set 2026). */}
+                    {status === 'nuova' && rows.length > 0 ? (
+                      <span className="stage-btn-notify">{rows.length > 99 ? '99+' : rows.length}</span>
+                    ) : (
+                      <span className="muted"> · {rows.length}</span>
+                    )}
+                  </span>
+                </div>
+                <div className="kanban-cards">
+                  {rows.length === 0 && <p className="muted kanban-empty">Nessuna richiesta qui.</p>}
+                  {rows.map((r) => (
+                    <AcquistiRequestCard
+                      key={r.id}
+                      request={r}
+                      activity={acquistiRequestActivity(r)}
+                      supplierName={acquistiRequestSupplierName(r)}
+                      highlighted={highlightedId === r.id}
+                      expanded={expandedId === r.id}
+                      onToggleExpand={() => setExpandedId((id) => (id === r.id ? null : r.id))}
+                      onChangeStatus={(s) => updateAcquistiRequestStatus(r, s)}
+                    />
+                  ))}
+                </div>
               </div>
-              {filteredRequests
-                .slice()
-                .sort((a, b) => compareRequests(a, b, sortBy))
-                .map((request) => {
-                  const supplier = supplierMap.get(request.supplier_id)
-                  const requester = request.requested_by ? requesterMap.get(request.requested_by) : undefined
-                  const rotting = isRotting(request)
-                  return (
-                    <div key={request.id} id={'request-' + request.id}>
-                      <div
-                        className={
-                          'pipeline-row' +
-                          (highlightedId === request.id ? ' pipeline-row-highlighted' : '') +
-                          (rotting ? ' pipeline-row-rotting' : '')
-                        }
-                        onClick={() => setExpandedId((id) => (id === request.id ? null : request.id))}
-                      >
-                        <div className="pcol-client">
-                          <strong>{supplier?.name ?? 'fornitore eliminato'}</strong>
-                          <span className="muted">{request.subject}</span>
-                        </div>
-                        <span className={'pill pill-' + request.status}>{statusLabel(request.status)}</span>
-                        <span className="pcol-value pipeline-row-value">{currency.format(estimatedValue(request))}</span>
-                        <span className="pcol-owner">
-                          <RequesterAvatar requester={requester} />
-                        </span>
-                        <span className={'pcol-action' + (request.due_date && isOverdue(request.due_date) ? ' pipeline-action-overdue' : '')}>
-                          {request.due_date ? new Date(request.due_date).toLocaleDateString('it-IT') : '—'}
-                        </span>
-                        <span className="pcol-expand">{expandedId === request.id ? '▾' : '▸'}</span>
-                      </div>
-                      {expandedId === request.id && (
-                        <div className="pipeline-row-expanded">
-                          <RequestDetails
-                            request={request}
-                            requesters={profiles}
-                            onChangeStatus={(s) => updateStatus(request, s)}
-                            onChangeField={(patch) => updateField(request, patch)}
-                          />
-                        </div>
-                      )}
-                    </div>
-                  )
-                })}
-            </div>
-          )}
-        </>
-      )}
-    </div>
-  )
-}
-
-function RequesterAvatar({ requester }: { requester: Profile | undefined }) {
-  if (!requester) {
-    return (
-      <span className="deal-owner-avatar deal-owner-avatar-empty" title="Nessun richiedente assegnato">
-        —
-      </span>
-    )
-  }
-  return (
-    <span className="deal-owner-avatar" title={requester.full_name}>
-      {requester.initials}
-    </span>
-  )
-}
-
-// Stepper di stato, stessa idea del componente "Path" della Pipeline
-// clienti: pallini collegati (senza etichette) nella card compatta della
-// bacheca, versione estesa con etichette e grid elastica nell'elenco.
-function StatusPath({
-  request,
-  compact = false,
-  onChangeStatus,
-}: {
-  request: PurchaseRequest
-  compact?: boolean
-  onChangeStatus: (status: PurchaseStatus) => void
-}) {
-  if (request.status === 'annullata') {
-    return (
-      <div className="stage-path-lost">
-        <span className="stage-path-lost-label">Richiesta annullata</span>
-        <button type="button" className="stage-path-lost-btn" onClick={() => onChangeStatus('da_inviare')}>
-          Riapri come "da inviare"
-        </button>
-      </div>
-    )
-  }
-
-  const currentIdx = PATH_STATUSES.indexOf(request.status)
-
-  if (compact) {
-    const track: ReactNode[] = []
-    PATH_STATUSES.forEach((s, i) => {
-      const state = i < currentIdx ? 'done' : i === currentIdx ? 'current' : 'todo'
-      track.push(
-        <button
-          type="button"
-          key={s}
-          title={statusLabel(s)}
-          className={'stage-path-dot-only stage-path-' + state}
-          onClick={() => onChangeStatus(s)}
-        />,
-      )
-      if (i < PATH_STATUSES.length - 1) {
-        track.push(<span key={s + '-c'} className={'stage-path-connector' + (i < currentIdx ? ' done' : '')} />)
-      }
-    })
-    return (
-      <div className="stage-path-compact">
-        <div className="stage-path-compact-track">{track}</div>
-        <div className="stage-path-compact-foot">
-          <span className="muted">{statusLabel(request.status)}</span>
-          {request.status !== 'ricevuta' && (
-            <button type="button" className="stage-path-lost-btn" onClick={() => onChangeStatus('annullata')}>
-              Annulla
-            </button>
-          )}
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className="stage-path">
-      <div className="stage-path-track">
-        {PATH_STATUSES.map((s, i) => {
-          const state = i < currentIdx ? 'done' : i === currentIdx ? 'current' : 'todo'
-          return (
-            <button
-              type="button"
-              key={s}
-              className={'stage-path-step stage-path-' + state}
-              onClick={() => onChangeStatus(s)}
-            >
-              <span className="stage-path-dot">{state === 'done' ? '✓' : i + 1}</span>
-              <span className="stage-path-label">{statusLabel(s)}</span>
-            </button>
-          )
-        })}
-      </div>
-      {request.status !== 'ricevuta' && (
-        <div className="stage-path-foot">
-          <button type="button" className="stage-path-lost-btn" onClick={() => onChangeStatus('annullata')}>
-            Segna come annullata
-          </button>
+            )
+          })}
         </div>
       )}
     </div>
   )
 }
 
-function RequestDetails({
+// Scheda della bacheca per stato: mostra il tipo di attività e il
+// fornitore nel titolo (già nell'oggetto della richiesta collegata), con i
+// dettagli guidati completi e i commenti a comparsa — stessa idea di
+// DealDetails nella Pipeline clienti.
+function AcquistiRequestCard({
   request,
-  compact = false,
-  requesters,
-  onChangeStatus,
-  onChangeField,
-}: {
-  request: PurchaseRequest
-  compact?: boolean
-  requesters: Profile[]
-  onChangeStatus: (s: PurchaseStatus) => void
-  onChangeField: (patch: Partial<PurchaseRequest>) => void
-}) {
-  const [uploading, setUploading] = useState(false)
-
-  async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0]
-    if (!file) return
-    setUploading(true)
-    const path = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
-    const { error } = await supabase.storage.from('purchase-attachments').upload(path, file, { upsert: true })
-    setUploading(false)
-    e.target.value = ''
-    if (error) {
-      alert("Non è stato possibile caricare l'allegato: " + error.message)
-      return
-    }
-    const { data } = supabase.storage.from('purchase-attachments').getPublicUrl(path)
-    onChangeField({ attachment_url: data.publicUrl, attachment_name: file.name })
-  }
-
-  return (
-    <div className="kanban-card-expanded" onClick={(e) => e.stopPropagation()}>
-      <StatusPath request={request} compact={compact} onChangeStatus={onChangeStatus} />
-
-      <div className="field-row">
-        <label className="field-label">Richiesta da</label>
-        <select value={request.requested_by ?? ''} onChange={(e) => onChangeField({ requested_by: e.target.value || null })}>
-          <option value="">— Nessuno —</option>
-          {requesters.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.full_name}
-            </option>
-          ))}
-        </select>
-      </div>
-
-      <div className="field-row-2">
-        <div className="field-row">
-          <label className="field-label">Prezzo unitario (€)</label>
-          <input
-            type="number"
-            defaultValue={request.unit_price ?? ''}
-            placeholder="0"
-            onBlur={(e) => {
-              const v = e.target.value === '' ? null : Number(e.target.value)
-              if (v !== request.unit_price) onChangeField({ unit_price: v })
-            }}
-          />
-        </div>
-        <div className="field-row">
-          <label className="field-label">Quantità</label>
-          <div className="field-row-inline">
-            <input
-              type="number"
-              defaultValue={request.quantity ?? ''}
-              placeholder="0"
-              onBlur={(e) => {
-                const v = e.target.value === '' ? null : Number(e.target.value)
-                if (v !== request.quantity) onChangeField({ quantity: v })
-              }}
-            />
-            <input
-              defaultValue={request.quantity_unit ?? ''}
-              placeholder="unità (kg, pezzi…)"
-              onBlur={(e) => {
-                const v = e.target.value.trim() || null
-                if (v !== request.quantity_unit) onChangeField({ quantity_unit: v })
-              }}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div className="field-row">
-        <label className="field-label">Scadenza</label>
-        <input
-          type="date"
-          value={request.due_date ?? ''}
-          onChange={(e) => onChangeField({ due_date: e.target.value || null })}
-        />
-      </div>
-
-      <div className="field-row">
-        <label className="field-label">Specifiche d'ordine</label>
-        <textarea
-          className="note-field"
-          defaultValue={request.order_specs}
-          placeholder="Specifiche tecniche, condizioni di consegna…"
-          onBlur={(e) => {
-            if (e.target.value !== request.order_specs) onChangeField({ order_specs: e.target.value })
-          }}
-        />
-      </div>
-
-      <div className="field-row">
-        <label className="field-label">Dettagli</label>
-        <textarea
-          className="note-field"
-          defaultValue={request.body}
-          placeholder="Nota…"
-          onBlur={(e) => {
-            if (e.target.value !== request.body) onChangeField({ body: e.target.value })
-          }}
-        />
-      </div>
-
-      <div className="field-row">
-        <label className="field-label">Documentazione (facoltativa — es. scheda tecnica, conferma d'ordine, DDT)</label>
-        {request.attachment_url ? (
-          <div className="marketing-attachment-row">
-            <a href={request.attachment_url} target="_blank" rel="noreferrer">
-              📎 {request.attachment_name}
-            </a>
-            <button
-              type="button"
-              className="btn btn-ghost"
-              onClick={() => onChangeField({ attachment_url: null, attachment_name: null })}
-            >
-              Rimuovi
-            </button>
-          </div>
-        ) : (
-          <input type="file" onChange={handleFileChange} disabled={uploading} />
-        )}
-        {uploading && <span className="muted">Caricamento…</span>}
-      </div>
-
-      <CommentThread refTable="purchase_requests" refId={request.id} refLabel={request.subject} />
-    </div>
-  )
-}
-
-function RequestCard({
-  request,
-  supplier,
-  requester,
-  rotting,
-  dragging,
-  saving,
+  activity,
+  supplierName,
   highlighted,
   expanded,
-  requesters,
   onToggleExpand,
-  onDragStart,
-  onDragEnd,
   onChangeStatus,
-  onChangeField,
 }: {
-  request: PurchaseRequest
-  supplier: Supplier | undefined
-  requester: Profile | undefined
-  rotting: boolean
-  dragging: boolean
-  saving: boolean
+  request: Request
+  activity: ProcurementActivity | undefined
+  supplierName: string | undefined
   highlighted: boolean
   expanded: boolean
-  requesters: Profile[]
   onToggleExpand: () => void
-  onDragStart: (e: DragEvent<HTMLDivElement>) => void
-  onDragEnd: () => void
-  onChangeStatus: (s: PurchaseStatus) => void
-  onChangeField: (patch: Partial<PurchaseRequest>) => void
+  onChangeStatus: (s: RequestStatus) => void
 }) {
-  const next = nextPathStatus(request.status)
-  const showQuickActions = request.status !== 'ricevuta' && request.status !== 'annullata'
-
   return (
     <div
-      id={'request-' + request.id}
-      className={
-        'card kanban-card' +
-        (dragging ? ' dragging' : '') +
-        (saving ? ' saving' : '') +
-        (rotting ? ' kanban-card-rotting' : '') +
-        (highlighted ? ' kanban-card-highlighted' : '')
-      }
-      draggable
-      onDragStart={onDragStart}
-      onDragEnd={onDragEnd}
+      id={'acquisti-request-' + request.id}
+      className={'card kanban-card' + (highlighted ? ' kanban-card-highlighted' : '')}
     >
       <div className="kanban-card-main">
-        <div className="kanban-card-top">
-          <strong>{supplier?.name ?? 'fornitore eliminato'}</strong>
-          <RequesterAvatar requester={requester} />
-        </div>
-        <span className="muted">{request.subject}</span>
-        {request.quantity != null && (
-          <span className="muted">
-            {request.quantity} {request.quantity_unit ?? ''}
-          </span>
-        )}
-      </div>
-
-      <div className="kanban-card-value-row">
-        <span className="kanban-card-value">{currency.format(estimatedValue(request))}</span>
+        <strong>
+          {request.status === 'nuova' && <span className="row-notify-dot" />}
+          {request.subject}
+        </strong>
+        {supplierName && !request.subject.includes(supplierName) && <span className="muted">{supplierName}</span>}
       </div>
 
       {request.due_date && (
@@ -782,32 +317,26 @@ function RequestCard({
         </span>
       )}
 
-      {rotting && <span className="kanban-rotting-label">Ferma da {daysSince(request.updated_at)} giorni — nessun aggiornamento</span>}
-
-      {showQuickActions && (
-        <div className="kanban-quick-actions">
-          {next && (
-            <button type="button" className="btn btn-primary btn-sm" onClick={() => onChangeStatus(next)}>
-              {next === 'ricevuta' ? '✓ Segna come ricevuta' : '→ ' + statusLabel(next)}
-            </button>
-          )}
-          <button type="button" className="btn btn-ghost btn-sm kanban-lost-btn" onClick={() => onChangeStatus('annullata')}>
-            Annulla
+      <div className="kanban-quick-actions">
+        {ACQUISTI_REQUEST_STATUSES.filter((s) => s !== request.status).map((s) => (
+          <button key={s} type="button" className="btn btn-ghost btn-sm" onClick={() => onChangeStatus(s)}>
+            → {ACQUISTI_REQUEST_STATUS_LABELS[s]}
           </button>
-        </div>
-      )}
+        ))}
+      </div>
 
       <button type="button" className="kanban-details-toggle" onClick={onToggleExpand}>
         {expanded ? 'Nascondi dettagli ▾' : 'Dettagli e commenti ▸'}
       </button>
       {expanded && (
-        <RequestDetails
-          request={request}
-          compact
-          requesters={requesters}
-          onChangeStatus={onChangeStatus}
-          onChangeField={onChangeField}
-        />
+        <div className="kanban-card-expanded" onClick={(e) => e.stopPropagation()}>
+          {activity ? (
+            <ProcurementActivityDetailsView details={activity.activity_details} />
+          ) : (
+            <p className="muted">Attività collegata non trovata.</p>
+          )}
+          <CommentThread refTable="requests" refId={request.id} refLabel={request.subject} />
+        </div>
       )}
     </div>
   )
@@ -820,7 +349,7 @@ function RequestCard({
 function ProcurementActivityDetailsView({ details }: { details: ProcurementActivityDetails }) {
   if (!details) return null
 
-  if (details.tag === 'VISITA FORNITORE') {
+  if (details.tag === 'INCONTRO FORNITORE') {
     return (
       <div className="activity-details-grid">
         {details.incontro && <span><strong>Incontro:</strong> {INCONTRO_TIPO_LABELS[details.incontro]}</span>}
@@ -830,16 +359,6 @@ function ProcurementActivityDetailsView({ details }: { details: ProcurementActiv
         {details.prossimi_passi_data && (
           <span><strong>Data prossimi passi:</strong> {new Date(details.prossimi_passi_data).toLocaleDateString('it-IT')}</span>
         )}
-      </div>
-    )
-  }
-
-  if (details.tag === 'RIUNIONE INTERNA') {
-    return (
-      <div className="activity-details-grid">
-        {details.reparti.length > 0 && <span><strong>Reparti:</strong> {details.reparti.join(', ')}</span>}
-        {details.persone_presenti && <span><strong>Persone presenti:</strong> {details.persone_presenti}</span>}
-        {details.temi_trattati && <span><strong>Temi trattati:</strong> {details.temi_trattati}</span>}
       </div>
     )
   }
@@ -870,6 +389,17 @@ function ProcurementActivityDetailsView({ details }: { details: ProcurementActiv
           <span><strong>Data prossimi passi:</strong> {new Date(details.prossimi_passi_data).toLocaleDateString('it-IT')}</span>
         )}
         {details.urgenza && <span><strong>Urgenza:</strong> {URGENZA_LABELS[details.urgenza]}</span>}
+        <span className="muted">Segue lo stato nella bacheca qui sopra e in "Richieste".</span>
+      </div>
+    )
+  }
+
+  if (details.tag === 'RIUNIONE INTERNA') {
+    return (
+      <div className="activity-details-grid">
+        {details.reparti.length > 0 && <span><strong>Reparti:</strong> {details.reparti.join(', ')}</span>}
+        {details.persone_presenti && <span><strong>Persone presenti:</strong> {details.persone_presenti}</span>}
+        {details.temi_trattati && <span><strong>Temi trattati:</strong> {details.temi_trattati}</span>}
       </div>
     )
   }
@@ -899,50 +429,21 @@ function ProcurementActivityDetailsView({ details }: { details: ProcurementActiv
   )
 }
 
-function ProcurementActivityRow({
-  activity,
-  supplierName,
-  clientName,
-}: {
-  activity: ProcurementActivity
-  supplierName: string | undefined
-  clientName: string | undefined
-}) {
-  const [expanded, setExpanded] = useState(false)
-  const tag = activity.activity_details?.tag ?? 'Attività'
-  const who = supplierName ?? clientName ?? (tag === 'RIUNIONE INTERNA' ? 'Interna' : '—')
-  return (
-    <div>
-      <div className="client-deal-row" style={{ cursor: 'pointer' }} onClick={() => setExpanded((v) => !v)}>
-        <span className="client-timeline-when muted">
-          {new Date(activity.created_at).toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}
-        </span>
-        <span>{tag}</span>
-        <span className="muted">{who}</span>
-        <span className="muted">{expanded ? 'Nascondi ▾' : 'Dettagli ▸'}</span>
-      </div>
-      {expanded && (
-        <div className="activity-details-view">
-          <ProcurementActivityDetailsView details={activity.activity_details} />
-        </div>
-      )}
-    </div>
-  )
-}
-
 const RICEZIONE_OPTIONS: RicezioneReclamo[] = ['mail', 'telefonica', 'di_persona']
 const NATURA_OPTIONS: NaturaReclamo[] = ['prodotto', 'documentale', 'logistica', 'servizio']
 const URGENZA_OPTIONS: Urgenza[] = ['bassa', 'media', 'alta']
 const PROCUREMENT_INCONTRO_OPTIONS: IncontroTipo[] = ['in_sede', 'presso_cliente', 'fiera']
+// "Reclamo Cliente" tolto dal 2026 (Andrea: non pertinente all'ufficio
+// acquisti, resta gestito dalla Pipeline clienti) — vedi ProcurementActivityDetails
+// in lib/types.ts per la nota completa sul cambio.
 const PROCUREMENT_ACTIVITY_TYPES = [
-  'VISITA FORNITORE',
-  'RECLAMO FORNITORE',
-  'RECLAMO CLIENTE',
-  'RIUNIONE INTERNA',
+  'INCONTRO FORNITORE',
   'RICHIESTA ANALISI CAMPIONE FORNITORE',
+  'RECLAMO FORNITORE',
+  'RIUNIONE INTERNA',
 ] as const
 // "Descrizione analisi" della richiesta campione fornitore non include "Test
-// pelle" — opzione pensata solo per il campione cliente (vedi Pipeline.tsx).
+// pelle" — opzione pensata solo per l'eventuale campione lato cliente.
 const TIPO_ANALISI_OPTIONS_FORNITORE: TipoAnalisi[] = ['comparativa', 'nuovo_prodotto']
 // Stessa idea di NEW_CLIENT_OPTION in Pipeline.tsx: un fornitore non ancora
 // in anagrafica si crea al volo dentro il form, senza dover prima passare
@@ -951,20 +452,17 @@ const NEW_SUPPLIER_OPTION = '__nuovo__'
 
 function NewProcurementActivityForm({
   suppliers,
-  clients,
   assignees,
   createdByName,
   onCreated,
 }: {
   suppliers: Supplier[]
-  clients: Client[]
   assignees: Profile[]
   createdByName: string
   onCreated: () => void
 }) {
   const [activityTag, setActivityTag] = useState<'' | (typeof PROCUREMENT_ACTIVITY_TYPES)[number]>('')
   const [supplierId, setSupplierId] = useState('')
-  const [clientId, setClientId] = useState('')
 
   // Fornitore non ancora in anagrafica, creato al volo — stessa idea del
   // blocco "nuovo cliente" in Pipeline.tsx.
@@ -976,14 +474,33 @@ function NewProcurementActivityForm({
   const [newSupplierContactPhone, setNewSupplierContactPhone] = useState('')
   const usingManualSupplier = supplierId === NEW_SUPPLIER_OPTION
 
-  // VISITA FORNITORE
+  // INCONTRO FORNITORE
   const [incontro, setIncontro] = useState<IncontroTipo | ''>('')
   const [temiTrattatiVisita, setTemiTrattatiVisita] = useState('')
   const [prodottiPresentati, setProdottiPresentati] = useState('')
   const [prossimiPassiVisita, setProssimiPassiVisita] = useState('')
   const [prossimiPassiDataVisita, setProssimiPassiDataVisita] = useState('')
 
-  // RECLAMO FORNITORE / RECLAMO CLIENTE (stessi campi, tag diverso)
+  // RICHIESTA ANALISI CAMPIONE FORNITORE — a differenza delle altre
+  // attività, questa segue anche il percorso Nuova/Lavorazione/Risolta:
+  // alla creazione genera in più una riga in "requests" (reparto acquisti),
+  // vedi handleSubmit.
+  const [descrizioneProdottoAnalisi, setDescrizioneProdottoAnalisi] = useState('')
+  const [schedaTecnicaUrl, setSchedaTecnicaUrl] = useState<string | null>(null)
+  const [schedaTecnicaName, setSchedaTecnicaName] = useState<string | null>(null)
+  const [uploadingSchedaTecnica, setUploadingSchedaTecnica] = useState(false)
+  const [msdsUrl, setMsdsUrl] = useState<string | null>(null)
+  const [msdsName, setMsdsName] = useState<string | null>(null)
+  const [uploadingMsds, setUploadingMsds] = useState(false)
+  const [tipoAnalisi, setTipoAnalisi] = useState<TipoAnalisi | ''>('')
+  const [prodottoDaComparare, setProdottoDaComparare] = useState('')
+  const [descrizioneRichiesteAnalisi, setDescrizioneRichiesteAnalisi] = useState('')
+  const [prossimiPassiAnalisi, setProssimiPassiAnalisi] = useState('')
+  const [prossimiPassiDataAnalisi, setProssimiPassiDataAnalisi] = useState('')
+  const [urgenzaAnalisi, setUrgenzaAnalisi] = useState<Urgenza | ''>('')
+  const [richiestoDaAnalisi, setRichiestoDaAnalisi] = useState('')
+
+  // RECLAMO FORNITORE
   const [ricezione, setRicezione] = useState<RicezioneReclamo | ''>('')
   const [natura, setNatura] = useState<NaturaReclamo | ''>('')
   const [nomeProdotto, setNomeProdotto] = useState('')
@@ -1005,27 +522,12 @@ function NewProcurementActivityForm({
   const [personePresenti, setPersonePresenti] = useState('')
   const [temiTrattatiRiunione, setTemiTrattatiRiunione] = useState('')
 
-  // RICHIESTA ANALISI CAMPIONE FORNITORE
-  const [descrizioneProdottoAnalisi, setDescrizioneProdottoAnalisi] = useState('')
-  const [schedaTecnicaUrl, setSchedaTecnicaUrl] = useState<string | null>(null)
-  const [schedaTecnicaName, setSchedaTecnicaName] = useState<string | null>(null)
-  const [uploadingSchedaTecnica, setUploadingSchedaTecnica] = useState(false)
-  const [msdsUrl, setMsdsUrl] = useState<string | null>(null)
-  const [msdsName, setMsdsName] = useState<string | null>(null)
-  const [uploadingMsds, setUploadingMsds] = useState(false)
-  const [tipoAnalisi, setTipoAnalisi] = useState<TipoAnalisi | ''>('')
-  const [prodottoDaComparare, setProdottoDaComparare] = useState('')
-  const [descrizioneRichiesteAnalisi, setDescrizioneRichiesteAnalisi] = useState('')
-  const [prossimiPassiAnalisi, setProssimiPassiAnalisi] = useState('')
-  const [prossimiPassiDataAnalisi, setProssimiPassiDataAnalisi] = useState('')
-  const [urgenzaAnalisi, setUrgenzaAnalisi] = useState<Urgenza | ''>('')
-  const [richiestoDaAnalisi, setRichiestoDaAnalisi] = useState('')
-
   const [assignments, setAssignments] = useState<PendingAssignment[]>([])
   const [saving, setSaving] = useState(false)
 
-  const isReclamo = activityTag === 'RECLAMO FORNITORE' || activityTag === 'RECLAMO CLIENTE'
+  const isReclamo = activityTag === 'RECLAMO FORNITORE'
   const isRichiestaAnalisiFornitore = activityTag === 'RICHIESTA ANALISI CAMPIONE FORNITORE'
+  const needsSupplier = activityTag === 'INCONTRO FORNITORE' || activityTag === 'RECLAMO FORNITORE' || isRichiestaAnalisiFornitore
 
   function toggleReparto(r: string) {
     setReparti((cur) => (cur.includes(r) ? cur.filter((x) => x !== r) : [...cur, r]))
@@ -1088,24 +590,13 @@ function NewProcurementActivityForm({
 
   function validate(): string | null {
     if (!activityTag) return 'Seleziona il tipo di attività.'
-    if (activityTag === 'VISITA FORNITORE' || activityTag === 'RECLAMO FORNITORE' || isRichiestaAnalisiFornitore) {
+    if (needsSupplier) {
       if (!supplierId) return 'Seleziona il fornitore.'
       if (usingManualSupplier && !manualSupplierName.trim()) return 'Inserisci il nome del nuovo fornitore.'
     }
-    if (activityTag === 'VISITA FORNITORE') {
+    if (activityTag === 'INCONTRO FORNITORE') {
       if (!incontro || !temiTrattatiVisita.trim() || !prodottiPresentati.trim() || !prossimiPassiVisita.trim()) {
         return 'Compila incontro, temi trattati, prodotti presentati e prossimi passi.'
-      }
-    }
-    if (activityTag === 'RECLAMO CLIENTE' && !clientId) return 'Seleziona il cliente.'
-    if (isReclamo) {
-      if (!ricezione || !natura || !descrizioneReclamo.trim() || !prossimiPassiReclamo.trim() || !urgenza) {
-        return 'Compila ricezione, natura del reclamo, descrizione, prossimi passi e urgenza.'
-      }
-    }
-    if (activityTag === 'RIUNIONE INTERNA') {
-      if (reparti.length === 0 || !personePresenti.trim() || !temiTrattatiRiunione.trim()) {
-        return 'Compila reparti coinvolti, persone presenti e temi trattati.'
       }
     }
     if (isRichiestaAnalisiFornitore) {
@@ -1115,6 +606,16 @@ function NewProcurementActivityForm({
       if (tipoAnalisi === 'comparativa' && !prodottoDaComparare.trim()) return 'Indica il prodotto da comparare.'
       if (tipoAnalisi === 'nuovo_prodotto' && !descrizioneRichiesteAnalisi.trim()) {
         return 'Indica la descrizione delle richieste di analisi.'
+      }
+    }
+    if (isReclamo) {
+      if (!ricezione || !natura || !descrizioneReclamo.trim() || !prossimiPassiReclamo.trim() || !urgenza) {
+        return 'Compila ricezione, natura del reclamo, descrizione, prossimi passi e urgenza.'
+      }
+    }
+    if (activityTag === 'RIUNIONE INTERNA') {
+      if (reparti.length === 0 || !personePresenti.trim() || !temiTrattatiRiunione.trim()) {
+        return 'Compila reparti coinvolti, persone presenti e temi trattati.'
       }
     }
     for (const a of assignments) {
@@ -1162,19 +663,37 @@ function NewProcurementActivityForm({
     let activityDetails: ProcurementActivityDetails = null
     let reclamoPriority: Urgenza | undefined
     let supplierIdToSave: string | null = null
-    let clientIdToSave: string | null = null
     let subjectLabel: string = activityTag
 
-    if (activityTag === 'VISITA FORNITORE') {
+    if (activityTag === 'INCONTRO FORNITORE') {
       supplierIdToSave = resolvedSupplierId
       activityDetails = {
-        tag: 'VISITA FORNITORE',
+        tag: 'INCONTRO FORNITORE',
         incontro,
         temi_trattati: temiTrattatiVisita.trim(),
         prodotti_presentati: prodottiPresentati.trim(),
         prossimi_passi: prossimiPassiVisita.trim(),
         prossimi_passi_data: prossimiPassiDataVisita,
       }
+      subjectLabel = `${activityTag} — ${resolvedSupplierName}`
+    } else if (isRichiestaAnalisiFornitore) {
+      supplierIdToSave = resolvedSupplierId
+      activityDetails = {
+        tag: 'RICHIESTA ANALISI CAMPIONE FORNITORE',
+        descrizione_prodotto: descrizioneProdottoAnalisi.trim(),
+        scheda_tecnica_url: schedaTecnicaUrl,
+        scheda_tecnica_name: schedaTecnicaName,
+        msds_url: msdsUrl,
+        msds_name: msdsName,
+        tipo_analisi: tipoAnalisi,
+        prodotto_da_comparare: prodottoDaComparare.trim(),
+        descrizione_richieste_analisi: descrizioneRichiesteAnalisi.trim(),
+        prossimi_passi: prossimiPassiAnalisi.trim(),
+        prossimi_passi_data: prossimiPassiDataAnalisi,
+        urgenza: urgenzaAnalisi,
+        richiesto_da: richiestoDaAnalisi,
+      }
+      reclamoPriority = urgenzaAnalisi || undefined
       subjectLabel = `${activityTag} — ${resolvedSupplierName}`
     } else if (activityTag === 'RECLAMO FORNITORE') {
       supplierIdToSave = resolvedSupplierId
@@ -1197,27 +716,6 @@ function NewProcurementActivityForm({
       }
       reclamoPriority = urgenza || undefined
       subjectLabel = `${activityTag} — ${resolvedSupplierName}`
-    } else if (activityTag === 'RECLAMO CLIENTE') {
-      clientIdToSave = clientId
-      activityDetails = {
-        tag: 'RECLAMO CLIENTE',
-        ricezione,
-        natura,
-        nome_prodotto: nomeProdotto.trim(),
-        documento_numero: documentoNumero.trim(),
-        descrizione_prodotto: descrizioneProdotto.trim(),
-        descrizione_servizio: descrizioneServizio.trim(),
-        riferimento_lotto: riferimentoLotto.trim(),
-        riferimento_documento: riferimentoDocumento.trim(),
-        descrizione_reclamo: descrizioneReclamo.trim(),
-        attachment_url: attachmentUrl,
-        attachment_name: attachmentName,
-        prossimi_passi: prossimiPassiReclamo.trim(),
-        prossimi_passi_data: prossimiPassiDataReclamo,
-        urgenza,
-      }
-      reclamoPriority = urgenza || undefined
-      subjectLabel = `${activityTag} — ${clients.find((c) => c.id === clientId)?.name ?? ''}`
     } else if (activityTag === 'RIUNIONE INTERNA') {
       activityDetails = {
         tag: 'RIUNIONE INTERNA',
@@ -1225,32 +723,13 @@ function NewProcurementActivityForm({
         persone_presenti: personePresenti.trim(),
         temi_trattati: temiTrattatiRiunione.trim(),
       }
-    } else if (isRichiestaAnalisiFornitore) {
-      supplierIdToSave = resolvedSupplierId
-      activityDetails = {
-        tag: 'RICHIESTA ANALISI CAMPIONE FORNITORE',
-        descrizione_prodotto: descrizioneProdottoAnalisi.trim(),
-        scheda_tecnica_url: schedaTecnicaUrl,
-        scheda_tecnica_name: schedaTecnicaName,
-        msds_url: msdsUrl,
-        msds_name: msdsName,
-        tipo_analisi: tipoAnalisi,
-        prodotto_da_comparare: prodottoDaComparare.trim(),
-        descrizione_richieste_analisi: descrizioneRichiesteAnalisi.trim(),
-        prossimi_passi: prossimiPassiAnalisi.trim(),
-        prossimi_passi_data: prossimiPassiDataAnalisi,
-        urgenza: urgenzaAnalisi,
-        richiesto_da: richiestoDaAnalisi,
-      }
-      reclamoPriority = urgenzaAnalisi || undefined
-      subjectLabel = `${activityTag} — ${resolvedSupplierName}`
     }
 
     const { data: newActivity, error } = await supabase
       .from('procurement_activities')
       .insert({
         supplier_id: supplierIdToSave,
-        client_id: clientIdToSave,
+        client_id: null,
         activity_details: activityDetails,
       })
       .select()
@@ -1259,6 +738,80 @@ function NewProcurementActivityForm({
       setSaving(false)
       alert("Non è stato possibile registrare l'attività: " + error.message)
       return
+    }
+
+    // Ogni attività Acquisti genera anche una richiesta vera e propria
+    // (reparto "acquisti"), così TUTTE — incontri fornitore, richieste
+    // analisi campione, reclami fornitore e riunioni interne — compaiono
+    // nella bacheca qui sopra e in "Richieste" con gli stati
+    // Nuova/Lavorazione/Risolta, collegate all'attività (vedi refRecords.ts
+    // — "procurement_activities" è già un tipo di collegamento valido). Un
+    // errore qui non deve far perdere l'attività già registrata: si avvisa
+    // e si prosegue, come per le assegnazioni.
+    let requestSubject = ''
+    let requestBodyLines: string[] = []
+    let requestDueDate: string | null = null
+    let requestPriority: Urgenza = 'media'
+
+    if (activityTag === 'INCONTRO FORNITORE') {
+      requestSubject = `Incontro fornitore — ${resolvedSupplierName}`
+      requestBodyLines = [
+        `Fornitore: ${resolvedSupplierName}`,
+        incontro ? `Incontro: ${INCONTRO_TIPO_LABELS[incontro]}` : '',
+        temiTrattatiVisita.trim() ? `Temi trattati: ${temiTrattatiVisita.trim()}` : '',
+        prodottiPresentati.trim() ? `Prodotti presentati: ${prodottiPresentati.trim()}` : '',
+      ]
+      requestDueDate = prossimiPassiDataVisita || null
+    } else if (isRichiestaAnalisiFornitore) {
+      requestSubject = `Richiesta analisi campione fornitore — ${resolvedSupplierName}`
+      requestBodyLines = [
+        `Fornitore: ${resolvedSupplierName}`,
+        `Descrizione prodotto: ${descrizioneProdottoAnalisi.trim()}`,
+        tipoAnalisi ? `Descrizione analisi: ${TIPO_ANALISI_LABELS[tipoAnalisi]}` : '',
+        prodottoDaComparare.trim() ? `Prodotto da comparare: ${prodottoDaComparare.trim()}` : '',
+        descrizioneRichiesteAnalisi.trim() ? `Descrizione richieste analisi: ${descrizioneRichiesteAnalisi.trim()}` : '',
+        richiestoDaAnalisi ? `Richiesta da: ${richiestoDaAnalisi}` : '',
+      ]
+      requestDueDate = prossimiPassiDataAnalisi || null
+      requestPriority = (urgenzaAnalisi || 'media') as Urgenza
+    } else if (activityTag === 'RECLAMO FORNITORE') {
+      requestSubject = `Reclamo fornitore — ${resolvedSupplierName}`
+      requestBodyLines = [
+        `Fornitore: ${resolvedSupplierName}`,
+        natura ? `Natura: ${NATURA_RECLAMO_LABELS[natura]}` : '',
+        nomeProdotto.trim() ? `Nome prodotto: ${nomeProdotto.trim()}` : '',
+        descrizioneReclamo.trim() ? `Descrizione reclamo: ${descrizioneReclamo.trim()}` : '',
+      ]
+      requestDueDate = prossimiPassiDataReclamo || null
+      requestPriority = (urgenza || 'media') as Urgenza
+    } else if (activityTag === 'RIUNIONE INTERNA') {
+      requestSubject = `Riunione interna${reparti.length > 0 ? ' — ' + reparti.join(', ') : ''}`
+      requestBodyLines = [
+        reparti.length > 0 ? `Reparti: ${reparti.join(', ')}` : '',
+        personePresenti.trim() ? `Persone presenti: ${personePresenti.trim()}` : '',
+        temiTrattatiRiunione.trim() ? `Temi trattati: ${temiTrattatiRiunione.trim()}` : '',
+      ]
+    }
+
+    if (requestSubject) {
+      const { error: requestError } = await supabase.from('requests').insert({
+        subject: requestSubject,
+        sender: createdByName,
+        department: 'acquisti',
+        priority: requestPriority,
+        body: requestBodyLines.filter(Boolean).join('\n'),
+        due_date: requestDueDate,
+        type: 'interna',
+        status: 'nuova',
+        ref_table: 'procurement_activities',
+        ref_id: newActivity.id,
+      })
+      if (requestError) {
+        setSaving(false)
+        alert("L'attività è stata registrata, ma non è stato possibile creare la richiesta collegata: " + requestError.message)
+        onCreated()
+        return
+      }
     }
 
     if (assignments.length > 0) {
@@ -1297,7 +850,14 @@ function NewProcurementActivityForm({
         </select>
       </div>
 
-      {(activityTag === 'VISITA FORNITORE' || activityTag === 'RECLAMO FORNITORE' || isRichiestaAnalisiFornitore) && (
+      {activityTag && (
+        <p className="muted">
+          Alla registrazione viene creata anche una richiesta in "Richieste" (reparto acquisti), visibile nella
+          bacheca qui sopra e da seguire con gli stati Nuova / Lavorazione / Risolta.
+        </p>
+      )}
+
+      {needsSupplier && (
         <>
           <div className="field-row">
             <label className="field-label">Fornitore</label>
@@ -1356,23 +916,116 @@ function NewProcurementActivityForm({
         </>
       )}
 
-      {activityTag === 'RECLAMO CLIENTE' && (
-        <div className="field-row">
-          <label className="field-label">Cliente</label>
-          <select value={clientId} onChange={(e) => setClientId(e.target.value)} required>
-            <option value="">— Seleziona —</option>
-            {clients.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.name}
-              </option>
-            ))}
-          </select>
+      {isRichiestaAnalisiFornitore && (
+        <div className="activity-fields-block">
+          <span className="activity-fields-title">Richiesta analisi campione fornitore</span>
+          <div className="field-row">
+            <label className="field-label">Descrizione prodotto</label>
+            <textarea value={descrizioneProdottoAnalisi} onChange={(e) => setDescrizioneProdottoAnalisi(e.target.value)} required />
+          </div>
+
+          <div className="field-row-2">
+            <div className="field-row">
+              <label className="field-label">Scheda tecnica (facoltativo)</label>
+              {schedaTecnicaUrl ? (
+                <div className="marketing-attachment-row">
+                  <a href={schedaTecnicaUrl} target="_blank" rel="noreferrer">📎 {schedaTecnicaName}</a>
+                  <button
+                    type="button"
+                    className="btn btn-ghost"
+                    onClick={() => { setSchedaTecnicaUrl(null); setSchedaTecnicaName(null) }}
+                  >
+                    Rimuovi
+                  </button>
+                </div>
+              ) : (
+                <input type="file" onChange={handleSchedaTecnicaChange} disabled={uploadingSchedaTecnica} />
+              )}
+              {uploadingSchedaTecnica && <span className="muted">Caricamento…</span>}
+            </div>
+            <div className="field-row">
+              <label className="field-label">MSDS (facoltativo)</label>
+              {msdsUrl ? (
+                <div className="marketing-attachment-row">
+                  <a href={msdsUrl} target="_blank" rel="noreferrer">📎 {msdsName}</a>
+                  <button type="button" className="btn btn-ghost" onClick={() => { setMsdsUrl(null); setMsdsName(null) }}>
+                    Rimuovi
+                  </button>
+                </div>
+              ) : (
+                <input type="file" onChange={handleMsdsChange} disabled={uploadingMsds} />
+              )}
+              {uploadingMsds && <span className="muted">Caricamento…</span>}
+            </div>
+          </div>
+
+          <div className="field-row">
+            <label className="field-label">Descrizione analisi</label>
+            <select value={tipoAnalisi} onChange={(e) => setTipoAnalisi(e.target.value as TipoAnalisi)} required>
+              <option value="">— Seleziona —</option>
+              {TIPO_ANALISI_OPTIONS_FORNITORE.map((t) => (
+                <option key={t} value={t}>
+                  {TIPO_ANALISI_LABELS[t]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {tipoAnalisi === 'comparativa' && (
+            <div className="field-row">
+              <label className="field-label">Prodotto da comparare</label>
+              <input value={prodottoDaComparare} onChange={(e) => setProdottoDaComparare(e.target.value)} required />
+            </div>
+          )}
+          {tipoAnalisi === 'nuovo_prodotto' && (
+            <div className="field-row">
+              <label className="field-label">Descrizione richieste analisi</label>
+              <textarea value={descrizioneRichiesteAnalisi} onChange={(e) => setDescrizioneRichiesteAnalisi(e.target.value)} required />
+            </div>
+          )}
+
+          <div className="field-row-2">
+            <div className="field-row">
+              <label className="field-label">Prossimi passi</label>
+              <textarea value={prossimiPassiAnalisi} onChange={(e) => setProssimiPassiAnalisi(e.target.value)} required />
+            </div>
+            <div className="field-row">
+              <label className="field-label">Data prossimi passi (facoltativa)</label>
+              <input type="date" value={prossimiPassiDataAnalisi} onChange={(e) => setProssimiPassiDataAnalisi(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="field-row">
+            <label className="field-label">Urgenza</label>
+            <select value={urgenzaAnalisi} onChange={(e) => setUrgenzaAnalisi(e.target.value as Urgenza)} required>
+              <option value="">— Seleziona —</option>
+              {URGENZA_OPTIONS.map((u) => (
+                <option key={u} value={u}>
+                  {URGENZA_LABELS[u]}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div className="field-row">
+            <label className="field-label">Richiesta da</label>
+            <select value={richiestoDaAnalisi} onChange={(e) => setRichiestoDaAnalisi(e.target.value)} required>
+              <option value="">— Seleziona —</option>
+              {assignees.map((p) => (
+                <option key={p.id} value={p.full_name}>
+                  {p.full_name}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <ActivityAssignment profiles={assignees} assignments={assignments} onChange={setAssignments} />
         </div>
       )}
 
-      {activityTag === 'VISITA FORNITORE' && (
+      {activityTag === 'INCONTRO FORNITORE' && (
         <div className="activity-fields-block">
-          <span className="activity-fields-title">Visita fornitore</span>
+          <span className="activity-fields-title">Incontro fornitore</span>
           <div className="field-row">
             <label className="field-label">Incontro</label>
             <select value={incontro} onChange={(e) => setIncontro(e.target.value as IncontroTipo)} required>
@@ -1408,7 +1061,7 @@ function NewProcurementActivityForm({
 
       {isReclamo && (
         <div className="activity-fields-block">
-          <span className="activity-fields-title">{activityTag === 'RECLAMO FORNITORE' ? 'Reclamo fornitore' : 'Reclamo cliente'}</span>
+          <span className="activity-fields-title">Reclamo fornitore</span>
           <div className="field-row-2">
             <div className="field-row">
               <label className="field-label">Ricezione reclamo</label>
@@ -1555,114 +1208,6 @@ function NewProcurementActivityForm({
             <textarea value={temiTrattatiRiunione} onChange={(e) => setTemiTrattatiRiunione(e.target.value)} required />
           </div>
           <ActivityAssignment profiles={assignees} assignments={assignments} onChange={setAssignments} />
-        </div>
-      )}
-
-      {isRichiestaAnalisiFornitore && (
-        <div className="activity-fields-block">
-          <span className="activity-fields-title">Richiesta analisi campione fornitore</span>
-          <div className="field-row">
-            <label className="field-label">Descrizione prodotto</label>
-            <textarea value={descrizioneProdottoAnalisi} onChange={(e) => setDescrizioneProdottoAnalisi(e.target.value)} required />
-          </div>
-
-          <div className="field-row-2">
-            <div className="field-row">
-              <label className="field-label">Schede tecniche (facoltativo)</label>
-              {schedaTecnicaUrl ? (
-                <div className="marketing-attachment-row">
-                  <a href={schedaTecnicaUrl} target="_blank" rel="noreferrer">📎 {schedaTecnicaName}</a>
-                  <button
-                    type="button"
-                    className="btn btn-ghost"
-                    onClick={() => { setSchedaTecnicaUrl(null); setSchedaTecnicaName(null) }}
-                  >
-                    Rimuovi
-                  </button>
-                </div>
-              ) : (
-                <input type="file" onChange={handleSchedaTecnicaChange} disabled={uploadingSchedaTecnica} />
-              )}
-              {uploadingSchedaTecnica && <span className="muted">Caricamento…</span>}
-            </div>
-            <div className="field-row">
-              <label className="field-label">MSDS (facoltativo)</label>
-              {msdsUrl ? (
-                <div className="marketing-attachment-row">
-                  <a href={msdsUrl} target="_blank" rel="noreferrer">📎 {msdsName}</a>
-                  <button type="button" className="btn btn-ghost" onClick={() => { setMsdsUrl(null); setMsdsName(null) }}>
-                    Rimuovi
-                  </button>
-                </div>
-              ) : (
-                <input type="file" onChange={handleMsdsChange} disabled={uploadingMsds} />
-              )}
-              {uploadingMsds && <span className="muted">Caricamento…</span>}
-            </div>
-          </div>
-
-          <div className="field-row">
-            <label className="field-label">Descrizione analisi</label>
-            <select value={tipoAnalisi} onChange={(e) => setTipoAnalisi(e.target.value as TipoAnalisi)} required>
-              <option value="">— Seleziona —</option>
-              {TIPO_ANALISI_OPTIONS_FORNITORE.map((t) => (
-                <option key={t} value={t}>
-                  {TIPO_ANALISI_LABELS[t]}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {tipoAnalisi === 'comparativa' && (
-            <div className="field-row">
-              <label className="field-label">Prodotto da comparare</label>
-              <input value={prodottoDaComparare} onChange={(e) => setProdottoDaComparare(e.target.value)} required />
-            </div>
-          )}
-          {tipoAnalisi === 'nuovo_prodotto' && (
-            <div className="field-row">
-              <label className="field-label">Descrizione richieste analisi</label>
-              <textarea value={descrizioneRichiesteAnalisi} onChange={(e) => setDescrizioneRichiesteAnalisi(e.target.value)} required />
-            </div>
-          )}
-
-          <div className="field-row-2">
-            <div className="field-row">
-              <label className="field-label">Prossimi passi</label>
-              <textarea value={prossimiPassiAnalisi} onChange={(e) => setProssimiPassiAnalisi(e.target.value)} required />
-            </div>
-            <div className="field-row">
-              <label className="field-label">Data prossimi passi (facoltativa)</label>
-              <input type="date" value={prossimiPassiDataAnalisi} onChange={(e) => setProssimiPassiDataAnalisi(e.target.value)} />
-            </div>
-          </div>
-
-          <div className="field-row">
-            <label className="field-label">Urgenza</label>
-            <select value={urgenzaAnalisi} onChange={(e) => setUrgenzaAnalisi(e.target.value as Urgenza)} required>
-              <option value="">— Seleziona —</option>
-              {URGENZA_OPTIONS.map((u) => (
-                <option key={u} value={u}>
-                  {URGENZA_LABELS[u]}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div className="field-row">
-            <label className="field-label">Richiesta da</label>
-            <select value={richiestoDaAnalisi} onChange={(e) => setRichiestoDaAnalisi(e.target.value)} required>
-              <option value="">— Seleziona —</option>
-              {assignees.map((p) => (
-                <option key={p.id} value={p.full_name}>
-                  {p.full_name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <ActivityAssignment profiles={assignees} assignments={assignments} onChange={setAssignments} />
-          <p className="muted">L'attività verrà girata al laboratorio Ricerca&Sviluppo tramite l'assegnazione sopra.</p>
         </div>
       )}
 

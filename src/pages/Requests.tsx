@@ -1,13 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { useAuth } from '../context/AuthContext'
 import { CommentThread } from '../components/CommentThread'
 import { RefPicker } from '../components/RefPicker'
-import { describeRef, refLinkPath, type RequestRefTable } from '../lib/refRecords'
+import { describeRef, refLinkPath, REQUEST_REF_LABELS, REQUEST_REF_TABLES, type RequestRefTable } from '../lib/refRecords'
 import { type Client, type Profile, type Request, type RequestDepartment, type RequestPriority, type RequestStatus } from '../lib/types'
 
 const STATUSES: RequestStatus[] = ['nuova', 'lavorazione', 'risolta']
-const DEPARTMENTS: RequestDepartment[] = ['commerciale', 'tecnico', 'operativo', 'amministrazione']
+const DEPARTMENTS: RequestDepartment[] = ['commerciale', 'tecnico', 'operativo', 'amministrazione', 'acquisti', 'ricerca']
 const PRIORITIES: RequestPriority[] = ['alta', 'media', 'bassa']
 
 // Filtro per stato in testata, come una scheda separata per ciascuno stato:
@@ -24,12 +25,24 @@ const STATUS_FILTER_LABELS: Record<StatusFilter, string> = {
   tutte: 'Tutte',
 }
 
+// Filtri secondari per "tipo di richiesta" (richiesti da Andrea, set 2026):
+// reparto, a cosa è collegata (o a niente) e interna/esterna — si
+// combinano tra loro e con il filtro di stato qui sopra, così le "Nuove"
+// possono essere ristrette solo a quelle, ad es., dell'ufficio acquisti.
+type DepartmentFilter = RequestDepartment | 'tutti'
+type RefTableFilter = RequestRefTable | 'nessuno' | 'tutti'
+type TypeFilter = 'interna' | 'esterna' | 'tutti'
+
 export function Requests() {
+  const { profile } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [requests, setRequests] = useState<Request[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [clients, setClients] = useState<Client[]>([])
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('nuova')
+  const [departmentFilter, setDepartmentFilter] = useState<DepartmentFilter>('tutti')
+  const [refTableFilter, setRefTableFilter] = useState<RefTableFilter>('tutti')
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('tutti')
   const [selected, setSelected] = useState<Request | null>(null)
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
@@ -81,6 +94,22 @@ export function Requests() {
     loadClients()
   }, [])
 
+  // Notifiche "live": se arriva una nuova richiesta o un'altra persona ne
+  // cambia lo stato, l'elenco (e i pallini sui filtri/righe qui sotto) si
+  // aggiornano subito, senza dover ricaricare la pagina — richiesto da
+  // Andrea (set 2026), stesso canale già usato per il pallino sulla casella
+  // "Richieste" del menu (vedi AuthContext.tsx).
+  useEffect(() => {
+    const channel = supabase
+      .channel('requests_page_live')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'requests' }, () => loadRequests())
+      .subscribe()
+    return () => {
+      supabase.removeChannel(channel)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   // Un link "da fuori" (dal Calendario, dalla ricerca, da un'altra pagina)
   // può indicare quale richiesta aprire — vale anche restando su questa
   // pagina, non solo al primo caricamento (stesso pattern usato in Clienti).
@@ -90,20 +119,44 @@ export function Requests() {
     const request = requests.find((r) => r.id === fromLink)
     if (request) {
       setSelected(request)
-      setStatusFilter('tutte') // altrimenti, se lo stato non corrisponde alla scheda attiva, sparirebbe dall'elenco
+      // Azzera anche i filtri di reparto/collegamento/interna-esterna, non
+      // solo lo stato: altrimenti un link "da fuori" (es. l'avviso 🔔 in
+      // Chat per una richiesta di un altro reparto) apre la scheda ma la
+      // riga resta nascosta/non evidenziata nell'elenco sotto perché non
+      // corrisponde ai filtri attivi in quel momento.
+      setStatusFilter('tutte')
+      setDepartmentFilter('tutti')
+      setRefTableFilter('tutti')
+      setTypeFilter('tutti')
     }
     setSearchParams({}, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, requests])
 
-  const statusCounts: Record<StatusFilter, number> = {
-    nuova: requests.filter((r) => r.status === 'nuova').length,
-    lavorazione: requests.filter((r) => r.status === 'lavorazione').length,
-    risolta: requests.filter((r) => r.status === 'risolta').length,
-    tutte: requests.length,
+  // I filtri secondari (reparto, collegamento, interna/esterna) si applicano
+  // insieme a quello di stato — i conteggi sulle schede Nuova/In
+  // lavorazione/... qui sotto riflettono già gli altri filtri attivi, così
+  // restano coerenti con quello che si vede aprendo quella scheda.
+  function matchesSecondaryFilters(r: Request): boolean {
+    if (departmentFilter !== 'tutti' && r.department !== departmentFilter) return false
+    if (refTableFilter === 'nessuno' && r.ref_table) return false
+    if (refTableFilter !== 'tutti' && refTableFilter !== 'nessuno' && r.ref_table !== refTableFilter) return false
+    if (typeFilter !== 'tutti' && r.type !== typeFilter) return false
+    return true
   }
 
-  const visibleRequests = requests.filter((r) => statusFilter === 'tutte' || r.status === statusFilter)
+  const secondaryFiltered = requests.filter(matchesSecondaryFilters)
+
+  const statusCounts: Record<StatusFilter, number> = {
+    nuova: secondaryFiltered.filter((r) => r.status === 'nuova').length,
+    lavorazione: secondaryFiltered.filter((r) => r.status === 'lavorazione').length,
+    risolta: secondaryFiltered.filter((r) => r.status === 'risolta').length,
+    tutte: secondaryFiltered.length,
+  }
+
+  const visibleRequests = secondaryFiltered.filter((r) => statusFilter === 'tutte' || r.status === statusFilter)
+
+  const secondaryFiltersActive = departmentFilter !== 'tutti' || refTableFilter !== 'tutti' || typeFilter !== 'tutti'
 
   async function updateStatus(request: Request, status: RequestStatus) {
     const { error } = await supabase.from('requests').update({ status }).eq('id', request.id)
@@ -145,6 +198,7 @@ export function Requests() {
         <NewRequestForm
           profiles={profiles}
           clients={clients}
+          senderName={profile?.full_name ?? ''}
           onCreated={() => {
             setShowForm(false)
             loadRequests()
@@ -159,9 +213,59 @@ export function Requests() {
             className={'stage-btn' + (statusFilter === s ? ' current' : '')}
             onClick={() => setStatusFilter(s)}
           >
-            {STATUS_FILTER_LABELS[s]} <span className="muted">· {statusCounts[s]}</span>
+            {STATUS_FILTER_LABELS[s]}
+            {/* Il pallino rosso resta solo su "Nuova": è l'unica cosa
+                davvero nuova/da guardare. "In lavorazione" è un conteggio
+                normale — persone e richieste ci restano per giorni, quindi
+                marcarlo di rosso lo faceva sembrare sempre "urgente" anche
+                quando non lo era, la causa principale della confusione
+                (richiesta di Andrea, set 2026: notifiche semplici, un
+                significato solo). */}
+            {s === 'nuova' && statusCounts[s] > 0 ? (
+              <span className="stage-btn-notify">{statusCounts[s] > 99 ? '99+' : statusCounts[s]}</span>
+            ) : (
+              <span className="muted"> · {statusCounts[s]}</span>
+            )}
           </button>
         ))}
+      </div>
+
+      <div className="pipeline-toolbar req-type-filters">
+        <select value={departmentFilter} onChange={(e) => setDepartmentFilter(e.target.value as DepartmentFilter)}>
+          <option value="tutti">Tutti i reparti</option>
+          {DEPARTMENTS.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
+        <select value={refTableFilter} onChange={(e) => setRefTableFilter(e.target.value as RefTableFilter)}>
+          <option value="tutti">Collegata a: tutte</option>
+          <option value="nessuno">Nessun record collegato</option>
+          {REQUEST_REF_TABLES.map((t) => (
+            <option key={t} value={t}>
+              {REQUEST_REF_LABELS[t]}
+            </option>
+          ))}
+        </select>
+        <select value={typeFilter} onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}>
+          <option value="tutti">Interna o esterna: tutte</option>
+          <option value="interna">Interna</option>
+          <option value="esterna">Esterna</option>
+        </select>
+        {secondaryFiltersActive && (
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              setDepartmentFilter('tutti')
+              setRefTableFilter('tutti')
+              setTypeFilter('tutti')
+            }}
+          >
+            Azzera filtri
+          </button>
+        )}
       </div>
 
       {loading && <p className="muted">Caricamento…</p>}
@@ -181,7 +285,10 @@ export function Requests() {
               onClick={() => setSelected(r)}
             >
               <div className="req-main">
-                <div className="req-subject">{r.subject}</div>
+                <div className="req-subject">
+                  {r.status === 'nuova' && <span className="row-notify-dot" />}
+                  {r.subject}
+                </div>
                 <div className="req-meta">
                   {r.sender} · {r.type === 'interna' ? 'Interna' : 'Esterna'} ·{' '}
                   {new Date(r.created_at).toLocaleDateString('it-IT')}
@@ -269,14 +376,15 @@ export function Requests() {
 function NewRequestForm({
   profiles,
   clients,
+  senderName,
   onCreated,
 }: {
   profiles: Profile[]
   clients: Client[]
+  senderName: string
   onCreated: () => void
 }) {
   const [subject, setSubject] = useState('')
-  const [sender, setSender] = useState('')
   const [clientId, setClientId] = useState('')
   const [department, setDepartment] = useState<RequestDepartment>('commerciale')
   const [priority, setPriority] = useState<RequestPriority>('media')
@@ -294,7 +402,7 @@ function NewRequestForm({
     setSaving(true)
     const { error } = await supabase.from('requests').insert({
       subject,
-      sender,
+      sender: senderName,
       client_id: clientId || null,
       ref_table: refTable || null,
       ref_id: refTable ? refId || null : null,
@@ -322,7 +430,7 @@ function NewRequestForm({
       </div>
       <div className="field-row">
         <label className="field-label">Mittente</label>
-        <input value={sender} onChange={(e) => setSender(e.target.value)} required />
+        <input value={senderName} disabled />
       </div>
       {clients.length > 0 && (
         <div className="field-row">
