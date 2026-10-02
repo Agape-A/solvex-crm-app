@@ -573,7 +573,10 @@ export function Report() {
       {canSeeCommerciale && (
         <>
           <div className="view-head report-section-head">
-            <h2>Commerciale</h2>
+            {/* Dati già filtrati dalla RLS (0038_proprietario_clienti_e_validazione_tecnica.sql):
+                qui solo le proprie trattative/clienti per il tecnico, quindi
+                l'intestazione non deve più dire "Commerciale" per lui. */}
+            <h2>{profile?.role === 'tecnico' ? 'Validazioni tecniche' : 'Commerciale'}</h2>
           </div>
           <div className="tile-row">
             <div className="card tile">

@@ -133,10 +133,17 @@ export function Pipeline() {
   const [sortBy, setSortBy] = useState<SortKey>('recenti')
 
   const canCreate = profile ? CAN_CREATE_DELETE.includes(profile.role) : false
-  // Il tecnico vede tutto ma, per via del trigger nel database, può salvare
-  // solo modifiche al campo "note": niente trascinamento, niente cambio fase
-  // o proprietario — il vero controllo resta comunque lato server (0003_triggers.sql).
+  // Il tecnico vede solo le trattative con "Richiede validazione tecnica"
+  // attivo (0038_proprietario_clienti_e_validazione_tecnica.sql) e, per via
+  // del trigger nel database, può salvare solo modifiche al campo "note":
+  // niente trascinamento, niente cambio fase o proprietario — il vero
+  // controllo resta comunque lato server (0003_triggers.sql).
   const canEditFields = profile?.role === 'commerciale' || profile?.role === 'dirigente' || profile?.role === 'amministrazione'
+  // Un commerciale può assegnare una trattativa solo a se stesso (la RLS lo
+  // impone: "owner_id = auth.uid() or owner_id is null"), quindi per lui il
+  // menu "Proprietario" non ha senso — solo dirigente/amministrazione
+  // possono davvero riassegnare una trattativa a qualcun altro.
+  const isDirigente = profile?.role === 'dirigente' || profile?.role === 'amministrazione'
 
   async function loadDeals() {
     setLoading(true)
@@ -213,6 +220,15 @@ export function Pipeline() {
     if (error) alert('Non è stato possibile salvare la nota: ' + error.message)
   }
 
+  async function updateTechValidation(deal: Deal, value: boolean) {
+    const { error } = await supabase.from('deals').update({ requires_tech_validation: value }).eq('id', deal.id)
+    if (error) {
+      alert('Non è stato possibile aggiornare la validazione tecnica: ' + error.message)
+      return
+    }
+    setDeals((ds) => ds.map((d) => (d.id === deal.id ? { ...d, requires_tech_validation: value } : d)))
+  }
+
   const ownerMap = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles])
   const ownerOptions = useMemo(
     () =>
@@ -266,6 +282,7 @@ export function Pipeline() {
           assignees={profiles}
           defaultOwnerId={profile.id}
           createdByName={profile.full_name}
+          isDirigente={isDirigente}
           onCreated={() => { setShowForm(false); loadDeals() }}
         />
       )}
@@ -359,6 +376,7 @@ export function Pipeline() {
                           highlighted={highlightedId === deal.id}
                           canEditFields={canEditFields}
                           canDrag={canEditFields}
+                          isDirigente={isDirigente}
                           expanded={expandedId === deal.id}
                           owners={ownerOptions}
                           onToggleExpand={() => setExpandedId((id) => (id === deal.id ? null : deal.id))}
@@ -374,6 +392,7 @@ export function Pipeline() {
                           onChangeStage={(s) => updateStage(deal, s)}
                           onChangeOwner={(id) => updateOwner(deal, id)}
                           onChangeNote={(note) => updateNote(deal, note)}
+                          onChangeTechValidation={(v) => updateTechValidation(deal, v)}
                         />
                       ))}
                     </div>
@@ -436,10 +455,12 @@ export function Pipeline() {
                           <DealDetails
                             deal={deal}
                             canEditFields={canEditFields}
+                            isDirigente={isDirigente}
                             owners={ownerOptions}
                             onChangeStage={(s) => updateStage(deal, s)}
                             onChangeOwner={(id) => updateOwner(deal, id)}
                             onChangeNote={(note) => updateNote(deal, note)}
+                            onChangeTechValidation={(v) => updateTechValidation(deal, v)}
                           />
                         </div>
                       )}
@@ -687,19 +708,23 @@ function ActivityDetailsView({ details }: { details: DealActivityDetails }) {
 function DealDetails({
   deal,
   canEditFields,
+  isDirigente,
   compact = false,
   owners,
   onChangeStage,
   onChangeOwner,
   onChangeNote,
+  onChangeTechValidation,
 }: {
   deal: Deal
   canEditFields: boolean
+  isDirigente: boolean
   compact?: boolean
   owners: Profile[]
   onChangeStage: (s: DealStage) => void
   onChangeOwner: (ownerId: string | null) => void
   onChangeNote: (note: string) => void
+  onChangeTechValidation: (value: boolean) => void
 }) {
   return (
     <div className="kanban-card-expanded" onClick={(e) => e.stopPropagation()}>
@@ -708,15 +733,29 @@ function DealDetails({
       {canEditFields && (
         <div className="field-row">
           <label className="field-label">Proprietario</label>
-          <select value={deal.owner_id ?? ''} onChange={(e) => onChangeOwner(e.target.value || null)}>
-            <option value="">— Nessuno —</option>
-            {owners.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.full_name}
-              </option>
-            ))}
-          </select>
+          {isDirigente ? (
+            <select value={deal.owner_id ?? ''} onChange={(e) => onChangeOwner(e.target.value || null)}>
+              <option value="">— Nessuno —</option>
+              {owners.map((p) => (
+                <option key={p.id} value={p.id}>
+                  {p.full_name}
+                </option>
+              ))}
+            </select>
+          ) : (
+            <span>{owners.find((p) => p.id === deal.owner_id)?.full_name ?? '— Nessuno —'}</span>
+          )}
         </div>
+      )}
+      {canEditFields && (
+        <label className="field-checkbox">
+          <input
+            type="checkbox"
+            checked={deal.requires_tech_validation}
+            onChange={(e) => onChangeTechValidation(e.target.checked)}
+          />
+          Richiede validazione tecnica
+        </label>
       )}
       <div className="field-row">
         <label className="field-label">Nota</label>
@@ -743,6 +782,7 @@ function DealCard({
   highlighted,
   canEditFields,
   canDrag,
+  isDirigente,
   expanded,
   owners,
   onToggleExpand,
@@ -751,6 +791,7 @@ function DealCard({
   onChangeStage,
   onChangeOwner,
   onChangeNote,
+  onChangeTechValidation,
 }: {
   deal: Deal
   owner: Profile | undefined
@@ -760,6 +801,7 @@ function DealCard({
   highlighted: boolean
   canEditFields: boolean
   canDrag: boolean
+  isDirigente: boolean
   expanded: boolean
   owners: Profile[]
   onToggleExpand: () => void
@@ -768,6 +810,7 @@ function DealCard({
   onChangeStage: (s: DealStage) => void
   onChangeOwner: (ownerId: string | null) => void
   onChangeNote: (note: string) => void
+  onChangeTechValidation: (value: boolean) => void
 }) {
   const next = nextPathStage(deal.stage)
   const showQuickActions = canEditFields && deal.stage !== 'vinto' && deal.stage !== 'perso'
@@ -832,11 +875,13 @@ function DealCard({
         <DealDetails
           deal={deal}
           canEditFields={canEditFields}
+          isDirigente={isDirigente}
           compact
           owners={owners}
           onChangeStage={onChangeStage}
           onChangeOwner={onChangeOwner}
           onChangeNote={onChangeNote}
+          onChangeTechValidation={onChangeTechValidation}
         />
       )}
     </div>
@@ -877,6 +922,7 @@ function NewDealForm({
   assignees,
   defaultOwnerId,
   createdByName,
+  isDirigente,
   onCreated,
 }: {
   clients: Client[]
@@ -884,6 +930,7 @@ function NewDealForm({
   assignees: Profile[]
   defaultOwnerId: string
   createdByName: string
+  isDirigente: boolean
   onCreated: () => void
 }) {
   const [clientId, setClientId] = useState('')
@@ -896,6 +943,7 @@ function NewDealForm({
   const [newClientContact, setNewClientContact] = useState('')
 
   const [ownerId, setOwnerId] = useState(defaultOwnerId)
+  const [requiresTechValidation, setRequiresTechValidation] = useState(false)
   const [saving, setSaving] = useState(false)
 
   // Tipo di attività: determina quale set di campi guidati mostrare. Va in
@@ -1219,6 +1267,7 @@ function NewDealForm({
         product: deriveProductText(),
         stage: 'lead',
         owner_id: ownerId || null,
+        requires_tech_validation: requiresTechValidation,
         activity_details: activityDetails,
         next_action: nextAction,
       })
@@ -1310,15 +1359,28 @@ function NewDealForm({
 
       <div className="field-row">
         <label className="field-label">Proprietario</label>
-        <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
-          <option value="">— Nessuno —</option>
-          {owners.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.full_name}
-            </option>
-          ))}
-        </select>
+        {isDirigente ? (
+          <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
+            <option value="">— Nessuno —</option>
+            {owners.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.full_name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span>{owners.find((p) => p.id === ownerId)?.full_name ?? '— Tu —'}</span>
+        )}
       </div>
+
+      <label className="field-checkbox">
+        <input
+          type="checkbox"
+          checked={requiresTechValidation}
+          onChange={(e) => setRequiresTechValidation(e.target.checked)}
+        />
+        Richiede validazione tecnica
+      </label>
 
       <div className="field-row">
         <label className="field-label">Tipo di attività</label>

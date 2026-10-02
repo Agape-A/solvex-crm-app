@@ -84,6 +84,12 @@ export interface Client {
   contact_email: string | null
   contact_phone: string | null
   is_customer: boolean
+  // Proprietario esplicito (colonna aggiunta in
+  // 0038_proprietario_clienti_e_validazione_tecnica.sql): null = "non
+  // assegnato", visibile a tutto il reparto commerciale finché la
+  // direzione non lo assegna — vedi la policy "clients_select" in quella
+  // migrazione.
+  owner_id: string | null
   tags: string[]
   created_at: string
 }

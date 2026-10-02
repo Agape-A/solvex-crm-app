@@ -13,17 +13,19 @@ import {
   type ClientType,
   type Deal,
   type MarketingContact,
+  type Profile,
   type Request,
 } from '../lib/types'
 
 const TYPE_FILTERS: (ClientType | 'tutti')[] = ['tutti', 'conceria', 'distributore', 'azienda_chimica']
-const CAN_WRITE: string[] = ['commerciale', 'dirigente', 'amministrazione']
+const CAN_WRITE: string[] = ['commerciale', 'dirigente']
 const currency = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 
 export function Clients() {
   const { profile } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [clients, setClients] = useState<Client[]>([])
+  const [profiles, setProfiles] = useState<Profile[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [showImport, setShowImport] = useState(false)
@@ -37,7 +39,15 @@ export function Clients() {
   const [deleting, setDeleting] = useState(false)
 
   const canWrite = profile ? CAN_WRITE.includes(profile.role) : false
-  const canSeeDeals = profile ? ['tecnico', 'commerciale', 'dirigente', 'amministrazione'].includes(profile.role) : false
+  const canSeeDeals = profile ? ['tecnico', 'commerciale', 'dirigente'].includes(profile.role) : false
+  // Un commerciale può assegnare un cliente solo a se stesso (la RLS lo
+  // impone: "owner_id = auth.uid() or owner_id is null" — vedi
+  // 0038_proprietario_clienti_e_validazione_tecnica.sql); solo
+  // dirigente/amministrazione possono scegliere liberamente il proprietario.
+  const isDirigente = profile?.role === 'dirigente' || profile?.role === 'amministrazione'
+  const ownerOptions = profiles
+    .filter((p) => p.role === 'commerciale' || p.role === 'dirigente' || p.role === 'amministrazione')
+    .sort((a, b) => a.full_name.localeCompare(b.full_name))
 
   async function loadClients() {
     setLoading(true)
@@ -88,6 +98,10 @@ export function Clients() {
 
   useEffect(() => {
     loadClients()
+    supabase
+      .from('profiles')
+      .select('*')
+      .then(({ data }) => setProfiles((data as Profile[]) ?? []))
   }, [])
 
   // Un link "da fuori" (ricerca globale nella sidebar, o un rimando da
@@ -193,8 +207,17 @@ export function Clients() {
         (private label) — tutti in un'unica anagrafica.
       </p>
 
-      {showForm && <NewClientForm onCreated={() => { setShowForm(false); loadClients() }} />}
-      {showImport && <ImportClientsPanel onImported={() => { setShowImport(false); loadClients() }} />}
+      {showForm && profile && (
+        <NewClientForm
+          profile={profile}
+          owners={ownerOptions}
+          isDirigente={isDirigente}
+          onCreated={() => { setShowForm(false); loadClients() }}
+        />
+      )}
+      {showImport && profile && (
+        <ImportClientsPanel profile={profile} onImported={() => { setShowImport(false); loadClients() }} />
+      )}
 
       <div className="stage-btn-row client-filter-row">
         {TYPE_FILTERS.map((t) => (
@@ -241,6 +264,8 @@ export function Clients() {
               client={selected}
               canWrite={canWrite}
               canSeeDeals={canSeeDeals}
+              isDirigente={isDirigente}
+              owners={ownerOptions}
               deals={selectedDeals}
               requests={selectedRequests}
               appointments={selectedAppointments}
@@ -312,6 +337,8 @@ function ClientDetail({
   client,
   canWrite,
   canSeeDeals,
+  isDirigente,
+  owners,
   deals,
   requests,
   appointments,
@@ -324,6 +351,8 @@ function ClientDetail({
   client: Client
   canWrite: boolean
   canSeeDeals: boolean
+  isDirigente: boolean
+  owners: Profile[]
   deals: Deal[]
   requests: Request[]
   appointments: Appointment[]
@@ -374,6 +403,25 @@ function ClientDetail({
       ) : (
         <h3>{client.name}</h3>
       )}
+
+      <div className="field-row">
+        <label className="field-label">Proprietario</label>
+        {isDirigente ? (
+          <select
+            value={client.owner_id ?? ''}
+            onChange={(e) => onChange({ owner_id: e.target.value || null })}
+          >
+            <option value="">— Non assegnato —</option>
+            {owners.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.full_name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span>{owners.find((p) => p.id === client.owner_id)?.full_name ?? '— Non assegnato —'}</span>
+        )}
+      </div>
 
       {canWrite ? (
         <div className="field-row-2">
@@ -522,7 +570,17 @@ function ClientDetail({
   )
 }
 
-function NewClientForm({ onCreated }: { onCreated: () => void }) {
+function NewClientForm({
+  profile,
+  owners,
+  isDirigente,
+  onCreated,
+}: {
+  profile: Profile
+  owners: Profile[]
+  isDirigente: boolean
+  onCreated: () => void
+}) {
   const [name, setName] = useState('')
   const [sector, setSector] = useState('')
   const [clientType, setClientType] = useState<ClientType>('conceria')
@@ -530,6 +588,7 @@ function NewClientForm({ onCreated }: { onCreated: () => void }) {
   const [contactName, setContactName] = useState('')
   const [contactEmail, setContactEmail] = useState('')
   const [contactPhone, setContactPhone] = useState('')
+  const [ownerId, setOwnerId] = useState(profile.id)
   const [saving, setSaving] = useState(false)
 
   async function handleSubmit(e: FormEvent) {
@@ -543,6 +602,7 @@ function NewClientForm({ onCreated }: { onCreated: () => void }) {
       contact_name: contactName || null,
       contact_email: contactEmail || null,
       contact_phone: contactPhone || null,
+      owner_id: ownerId || null,
     })
     setSaving(false)
     if (error) {
@@ -557,6 +617,21 @@ function NewClientForm({ onCreated }: { onCreated: () => void }) {
       <div className="field-row">
         <label className="field-label">Ragione sociale</label>
         <input value={name} onChange={(e) => setName(e.target.value)} required />
+      </div>
+      <div className="field-row">
+        <label className="field-label">Proprietario</label>
+        {isDirigente ? (
+          <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
+            <option value="">— Non assegnato —</option>
+            {owners.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.full_name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span>{owners.find((p) => p.id === ownerId)?.full_name ?? '— Tu —'}</span>
+        )}
       </div>
       <div className="field-row-2">
         <div className="field-row">
@@ -651,6 +726,7 @@ interface ImportedRow {
   contact_name: string | null
   contact_email: string | null
   contact_phone: string | null
+  owner_id: string | null
 }
 
 function guessClientType(raw: string | undefined, fallback: ClientType): ClientType {
@@ -681,7 +757,13 @@ async function insertInChunks(rows: ImportedRow[], chunkSize = 300) {
   return written
 }
 
-function ImportClientsPanel({ onImported }: { onImported: () => void }) {
+function ImportClientsPanel({ profile, onImported }: { profile: Profile; onImported: () => void }) {
+  // Chi importa diventa proprietario dei clienti importati solo se è
+  // commerciale (coerente con la RLS: "owner_id = auth.uid() or owner_id is
+  // null" — vedi 0038_proprietario_clienti_e_validazione_tecnica.sql); se
+  // importa un dirigente/amministrazione, i clienti entrano "non assegnati"
+  // e vanno distribuiti a mano dal dettaglio cliente.
+  const importOwnerId = profile.role === 'commerciale' ? profile.id : null
   const [fileName, setFileName] = useState('')
   const [headers, setHeaders] = useState<string[]>([])
   const [rawRows, setRawRows] = useState<Record<string, unknown>[]>([])
@@ -753,6 +835,7 @@ function ImportClientsPanel({ onImported }: { onImported: () => void }) {
       contact_name: map.contactName ? cellToText(row[map.contactName]) || null : null,
       contact_email: map.contactEmail ? cellToText(row[map.contactEmail]) || null : null,
       contact_phone: map.contactPhone ? cellToText(row[map.contactPhone]) || null : null,
+      owner_id: importOwnerId,
     }
   }
 
