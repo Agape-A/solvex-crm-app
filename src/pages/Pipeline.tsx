@@ -555,9 +555,13 @@ function ProposalModal({
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (!canSubmit || proposalType === '') return
+    // "canSubmit" include già "proposalType !== ''": TypeScript lo deduce da
+    // solo (non serve/non si può ripetere il confronto qui, altrimenti lo
+    // segnala come sempre falso — è l'errore di build "TS2367" avuto su
+    // Vercel) e restringe da solo il tipo di proposalType più sotto.
+    if (!canSubmit) return
     onConfirm({
-      proposal_type: proposalType,
+      proposal_type: proposalType as ProposalType,
       proposal_reference_code: referenceCode.trim(),
       proposal_value: needsValue ? Number(value) : null,
       proposal_quantity: needsValue ? Number(quantity) : null,
