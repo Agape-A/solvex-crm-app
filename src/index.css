@@ -548,6 +548,37 @@ a.tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border
    'affordance' leggero al passaggio del mouse. */
 a.client-deal-row:hover { background: var(--surface-2); border-radius: 6px; }
 
+/* Variante espandibile della cronologia cliente (richiesta di Andrea, ott
+   2026: "tutte le attività del cliente, consultabili") — un bottone invece
+   di un link, con una colonna in più per l'indicatore di apertura; classe
+   indipendente da ".client-deal-row" per non toccare la cronologia
+   fornitore in Suppliers.tsx, che riusa quella. */
+.client-deal-row-btn {
+  all: unset;
+  display: grid; grid-template-columns: auto auto 1fr auto auto auto; gap: 10px; align-items: center;
+  padding: 8px 0; border-top: 1px solid var(--border); font-size: 12.5px;
+  width: 100%; text-align: left; cursor: pointer; color: inherit; font-family: inherit; box-sizing: border-box;
+}
+.client-deal-row-btn:first-child { border-top: none; }
+.client-deal-row-btn:hover { background: var(--surface-2); border-radius: 6px; }
+.client-timeline-expand { padding: 4px 4px 16px 4px; }
+.client-detail-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.client-detail-head .client-detail-name { flex: 1; margin-bottom: 0; }
+.client-tech-responsible-filter {
+  padding: 6px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface);
+  font-size: 11.5px; font-weight: 600;
+}
+
+/* ---- stampa scheda cliente (richiesta di Andrea, ott 2026) ---- */
+.no-print { }
+@media print {
+  .sidebar, .view-head, .client-filter-row, .client-list, .no-print { display: none !important; }
+  .main { padding: 0 !important; }
+  .view { padding: 0 !important; max-width: none !important; }
+  .req-layout { display: block !important; }
+  .detail-panel { border: none !important; box-shadow: none !important; padding: 0 !important; }
+}
+
 .field-row-inline { display: flex; gap: 8px; }
 .field-row-inline input { flex: 1; min-width: 0; }
 .client-deal-stage { background: var(--surface-2); color: var(--ink-2); text-transform: none; }

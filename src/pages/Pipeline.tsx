@@ -581,7 +581,11 @@ function StagePath({
 // (deal.activity_details). Per ora solo visualizzazione: la modifica dopo
 // la creazione arriverà in un passo successivo, quando saranno chiari gli
 // altri tag guidati da aggiungere.
-function ActivityDetailsView({ details }: { details: DealActivityDetails }) {
+// Esportata per riuso nella "cronologia cliente" di Clients.tsx (richiesta
+// di Andrea, ott 2026: "ogni scheda cliente deve riportare tutte le
+// attività del cliente, consultabili") — stessa resa dei dettagli guidati
+// usata qui nella pipeline, invece di duplicarla.
+export function ActivityDetailsView({ details }: { details: DealActivityDetails }) {
   if (!details) return null
 
   if (details.tag === 'PRIMO CONTATTO' || details.tag === 'CONTATTO COMMERCIALE CLIENTE') {

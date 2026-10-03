@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { CommentThread } from '../components/CommentThread'
+import { ActivityDetailsView } from './Pipeline'
 import {
   APPOINTMENT_TYPE_LABELS,
   CLIENT_TYPE_LABELS,
@@ -30,6 +31,7 @@ export function Clients() {
   const [showForm, setShowForm] = useState(false)
   const [showImport, setShowImport] = useState(false)
   const [filter, setFilter] = useState<ClientType | 'tutti'>('tutti')
+  const [techResponsibleFilter, setTechResponsibleFilter] = useState('')
   const [selected, setSelected] = useState<Client | null>(null)
   const [selectedDeals, setSelectedDeals] = useState<Deal[]>([])
   const [selectedRequests, setSelectedRequests] = useState<Request[]>([])
@@ -48,6 +50,16 @@ export function Clients() {
   // "owner_id = auth.uid()" in insert (vedi 0040_nuovo_contatto.sql).
   const ownerOptions = profiles
     .filter((p) => p.role === 'commerciale' || p.role === 'dirigente' || p.role === 'amministrazione')
+    .sort((a, b) => a.full_name.localeCompare(b.full_name))
+  // "Responsabile cliente" (0041_responsabile_cliente.sql, richiesta di
+  // Andrea, ott 2026): il tecnico assegnato a un cliente — campo separato
+  // da "Utente" qui sopra, pensato per dare a ogni tecnico un suo
+  // portafoglio di clienti. Assegnabile/modificabile solo da dirigente/
+  // amministrazione (imposto anche lato RLS con un trigger); chiunque può
+  // però filtrare la lista clienti per questo campo, qui sotto.
+  const canAssignTechResponsible = profile?.role === 'dirigente' || profile?.role === 'amministrazione'
+  const techOptions = profiles
+    .filter((p) => p.role === 'tecnico')
     .sort((a, b) => a.full_name.localeCompare(b.full_name))
 
   async function loadClients() {
@@ -166,7 +178,11 @@ export function Clients() {
     )
   }
 
-  const filtered = filter === 'tutti' ? clients : clients.filter((c) => c.client_type === filter)
+  const filtered = clients.filter((c) => {
+    if (filter !== 'tutti' && c.client_type !== filter) return false
+    if (techResponsibleFilter && c.tech_responsible_id !== techResponsibleFilter) return false
+    return true
+  })
 
   const counts: Record<ClientType | 'tutti', number> = {
     tutti: clients.length,
@@ -211,6 +227,8 @@ export function Clients() {
       {showForm && profile && (
         <NewClientForm
           profile={profile}
+          techOptions={techOptions}
+          canAssignTechResponsible={canAssignTechResponsible}
           onCreated={() => { setShowForm(false); loadClients() }}
         />
       )}
@@ -228,6 +246,18 @@ export function Clients() {
             {t === 'tutti' ? 'Tutti' : CLIENT_TYPE_LABELS[t]} <span className="muted">· {counts[t]}</span>
           </button>
         ))}
+        <select
+          className="client-tech-responsible-filter"
+          value={techResponsibleFilter}
+          onChange={(e) => setTechResponsibleFilter(e.target.value)}
+        >
+          <option value="">Tutti i responsabili cliente</option>
+          {techOptions.map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.full_name}
+            </option>
+          ))}
+        </select>
       </div>
 
       {loading && <p className="muted">Caricamento…</p>}
@@ -264,6 +294,9 @@ export function Clients() {
               canWrite={canWrite}
               canSeeDeals={canSeeDeals}
               owners={ownerOptions}
+              techOptions={techOptions}
+              canAssignTechResponsible={canAssignTechResponsible}
+              assignees={profiles}
               deals={selectedDeals}
               requests={selectedRequests}
               appointments={selectedAppointments}
@@ -282,15 +315,26 @@ export function Clients() {
 
 type TimelineKind = 'trattativa' | 'richiesta' | 'appuntamento'
 
-interface TimelineItem {
-  id: string
-  date: Date
-  kind: TimelineKind
-  title: string
-  sub: string
-  badge: string
-  badgeClass: string
-}
+// Ogni voce porta con sé anche il record originale (deal/request/
+// appointment): serve a mostrare TUTTI i dettagli dell'attività quando la
+// riga viene espansa (richiesta di Andrea, ott 2026: "ogni scheda cliente
+// deve riportare tutte le attività del cliente, consultabili") — prima la
+// cronologia mostrava solo un riassunto su una riga, senza modo di vedere
+// il resto (incontro, temi trattati, referente contatto, allegati, testo
+// della richiesta, note dell'appuntamento...).
+type TimelineItem =
+  | { id: string; date: Date; kind: 'trattativa'; title: string; sub: string; badge: string; badgeClass: string; deal: Deal }
+  | { id: string; date: Date; kind: 'richiesta'; title: string; sub: string; badge: string; badgeClass: string; request: Request }
+  | {
+      id: string
+      date: Date
+      kind: 'appuntamento'
+      title: string
+      sub: string
+      badge: string
+      badgeClass: string
+      appointment: Appointment
+    }
 
 const TIMELINE_LABEL: Record<TimelineKind, string> = {
   trattativa: 'Trattativa',
@@ -300,35 +344,82 @@ const TIMELINE_LABEL: Record<TimelineKind, string> = {
 
 function buildTimeline(deals: Deal[], requests: Request[], appointments: Appointment[]): TimelineItem[] {
   const items: TimelineItem[] = [
-    ...deals.map((d) => ({
+    ...deals.map((d): TimelineItem => ({
       id: 'deal-' + d.id,
       date: new Date(d.created_at),
-      kind: 'trattativa' as TimelineKind,
+      kind: 'trattativa',
       title: d.product,
       sub: currency.format(d.value_estimate),
       badge: DEAL_STAGES.find((s) => s.id === d.stage)?.label ?? d.stage,
       badgeClass: 'client-deal-stage',
+      deal: d,
     })),
-    ...requests.map((r) => ({
+    ...requests.map((r): TimelineItem => ({
       id: 'req-' + r.id,
       date: new Date(r.created_at),
-      kind: 'richiesta' as TimelineKind,
+      kind: 'richiesta',
       title: r.subject,
       sub: r.department,
       badge: r.status,
       badgeClass: 'pill-' + r.status,
+      request: r,
     })),
-    ...appointments.map((a) => ({
+    ...appointments.map((a): TimelineItem => ({
       id: 'appt-' + a.id,
       date: new Date(a.appointment_at),
-      kind: 'appuntamento' as TimelineKind,
+      kind: 'appuntamento',
       title: a.subject,
       sub: new Date(a.appointment_at).toLocaleString('it-IT', { dateStyle: 'medium', timeStyle: 'short' }),
       badge: APPOINTMENT_TYPE_LABELS[a.type],
       badgeClass: 'client-deal-stage',
+      appointment: a,
     })),
   ]
   return items.sort((a, b) => b.date.getTime() - a.date.getTime())
+}
+
+// Dettaglio completo di una voce della cronologia, mostrato quando la riga
+// viene espansa. Per le trattative riusa ActivityDetailsView di
+// Pipeline.tsx (stessa resa dei campi guidati vista lì), per richieste e
+// appuntamenti mostra i campi propri di quei moduli.
+function TimelineItemDetail({ item, assignees }: { item: TimelineItem; assignees: Profile[] }) {
+  if (item.kind === 'trattativa') {
+    return (
+      <div className="client-timeline-detail">
+        <ActivityDetailsView details={item.deal.activity_details} />
+        {item.deal.note && (
+          <p className="muted"><strong>Nota:</strong> {item.deal.note}</p>
+        )}
+      </div>
+    )
+  }
+  if (item.kind === 'richiesta') {
+    const r = item.request
+    return (
+      <div className="client-timeline-detail">
+        <div className="activity-details-grid">
+          <span><strong>Mittente:</strong> {r.sender}</span>
+          <span><strong>Tipo:</strong> {r.type}</span>
+          <span><strong>Reparto:</strong> {r.department}</span>
+          <span><strong>Priorità:</strong> {r.priority}</span>
+          {r.due_date && <span><strong>Scadenza:</strong> {new Date(r.due_date).toLocaleDateString('it-IT')}</span>}
+          {r.body && <span><strong>Testo:</strong> {r.body}</span>}
+        </div>
+      </div>
+    )
+  }
+  const a = item.appointment
+  const assignee = a.assignee_id ? assignees.find((p) => p.id === a.assignee_id) : undefined
+  return (
+    <div className="client-timeline-detail">
+      <div className="activity-details-grid">
+        <span><strong>Quando:</strong> {new Date(a.appointment_at).toLocaleString('it-IT', { dateStyle: 'full', timeStyle: 'short' })}</span>
+        <span><strong>Tipo:</strong> {APPOINTMENT_TYPE_LABELS[a.type]}</span>
+        {assignee && <span><strong>Assegnato a:</strong> {assignee.full_name}</span>}
+        {a.note && <span><strong>Nota:</strong> {a.note}</span>}
+      </div>
+    </div>
+  )
 }
 
 function ClientDetail({
@@ -336,6 +427,9 @@ function ClientDetail({
   canWrite,
   canSeeDeals,
   owners,
+  techOptions,
+  canAssignTechResponsible,
+  assignees,
   deals,
   requests,
   appointments,
@@ -349,6 +443,9 @@ function ClientDetail({
   canWrite: boolean
   canSeeDeals: boolean
   owners: Profile[]
+  techOptions: Profile[]
+  canAssignTechResponsible: boolean
+  assignees: Profile[]
   deals: Deal[]
   requests: Request[]
   appointments: Appointment[]
@@ -366,6 +463,9 @@ function ClientDetail({
   const [contactName, setContactName] = useState(client.contact_name ?? '')
   const [contactEmail, setContactEmail] = useState(client.contact_email ?? '')
   const [contactPhone, setContactPhone] = useState(client.contact_phone ?? '')
+  // Riga della cronologia aperta (al più una per volta) — richiesta di
+  // Andrea, ott 2026: "tutte le attività del cliente, consultabili".
+  const [expandedTimelineId, setExpandedTimelineId] = useState<string | null>(null)
 
   useEffect(() => {
     setName(client.name)
@@ -374,6 +474,7 @@ function ClientDetail({
     setContactName(client.contact_name ?? '')
     setContactEmail(client.contact_email ?? '')
     setContactPhone(client.contact_phone ?? '')
+    setExpandedTimelineId(null)
   }, [client.id]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const dealTotal = deals.reduce((sum, d) => sum + Number(d.value_estimate), 0)
@@ -389,20 +490,44 @@ function ClientDetail({
       <div className="eyebrow">
         {CLIENT_TYPE_LABELS[client.client_type]} · {client.country}
       </div>
-      {canWrite ? (
-        <input
-          className="client-detail-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          onBlur={() => name.trim() && name !== client.name && onChange({ name: name.trim() })}
-        />
-      ) : (
-        <h3>{client.name}</h3>
-      )}
+      <div className="client-detail-head">
+        {canWrite ? (
+          <input
+            className="client-detail-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={() => name.trim() && name !== client.name && onChange({ name: name.trim() })}
+          />
+        ) : (
+          <h3>{client.name}</h3>
+        )}
+        <button type="button" className="btn btn-ghost no-print" onClick={() => window.print()}>
+          Stampa scheda
+        </button>
+      </div>
 
       <div className="field-row">
         <label className="field-label">Utente</label>
         <span>{owners.find((p) => p.id === client.owner_id)?.full_name ?? '— Non assegnato —'}</span>
+      </div>
+
+      <div className="field-row">
+        <label className="field-label">Responsabile cliente (tecnico)</label>
+        {canAssignTechResponsible ? (
+          <select
+            value={client.tech_responsible_id ?? ''}
+            onChange={(e) => onChange({ tech_responsible_id: e.target.value || null })}
+          >
+            <option value="">— Non assegnato —</option>
+            {techOptions.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.full_name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span>{techOptions.find((p) => p.id === client.tech_responsible_id)?.full_name ?? '— Non assegnato —'}</span>
+        )}
       </div>
 
       {canWrite ? (
@@ -515,14 +640,26 @@ function ClientDetail({
           {!dealsLoading && timeline.length > 0 && (
             <div className="client-deals-list">
               {timeline.map((item) => (
-                <div className="client-deal-row" key={item.id}>
-                  <span className="client-timeline-when muted">
-                    {item.date.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}
-                  </span>
-                  <span className="client-timeline-kind muted">{TIMELINE_LABEL[item.kind]}</span>
-                  <span>{item.title}</span>
-                  <span className={'pill ' + item.badgeClass}>{item.badge}</span>
-                  <span className="muted">{item.sub}</span>
+                <div key={item.id}>
+                  <button
+                    type="button"
+                    className="client-deal-row-btn"
+                    onClick={() => setExpandedTimelineId((id) => (id === item.id ? null : item.id))}
+                  >
+                    <span className="client-timeline-when muted">
+                      {item.date.toLocaleDateString('it-IT', { day: '2-digit', month: 'short' })}
+                    </span>
+                    <span className="client-timeline-kind muted">{TIMELINE_LABEL[item.kind]}</span>
+                    <span>{item.title}</span>
+                    <span className={'pill ' + item.badgeClass}>{item.badge}</span>
+                    <span className="muted">{item.sub}</span>
+                    <span className="muted">{expandedTimelineId === item.id ? '▾' : '▸'}</span>
+                  </button>
+                  {expandedTimelineId === item.id && (
+                    <div className="client-timeline-expand">
+                      <TimelineItemDetail item={item} assignees={assignees} />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -554,9 +691,13 @@ function ClientDetail({
 
 function NewClientForm({
   profile,
+  techOptions,
+  canAssignTechResponsible,
   onCreated,
 }: {
   profile: Profile
+  techOptions: Profile[]
+  canAssignTechResponsible: boolean
   onCreated: () => void
 }) {
   const [name, setName] = useState('')
@@ -566,6 +707,7 @@ function NewClientForm({
   const [contactName, setContactName] = useState('')
   const [contactEmail, setContactEmail] = useState('')
   const [contactPhone, setContactPhone] = useState('')
+  const [techResponsibleId, setTechResponsibleId] = useState('')
   const [saving, setSaving] = useState(false)
 
   async function handleSubmit(e: FormEvent) {
@@ -580,6 +722,7 @@ function NewClientForm({
       contact_email: contactEmail || null,
       contact_phone: contactPhone || null,
       owner_id: profile.id,
+      tech_responsible_id: canAssignTechResponsible ? techResponsibleId || null : null,
     })
     setSaving(false)
     if (error) {
@@ -599,6 +742,19 @@ function NewClientForm({
         <label className="field-label">Utente</label>
         <span>{profile.full_name}</span>
       </div>
+      {canAssignTechResponsible && (
+        <div className="field-row">
+          <label className="field-label">Responsabile cliente (tecnico, facoltativo)</label>
+          <select value={techResponsibleId} onChange={(e) => setTechResponsibleId(e.target.value)}>
+            <option value="">— Non assegnato —</option>
+            {techOptions.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.full_name}
+              </option>
+            ))}
+          </select>
+        </div>
+      )}
       <div className="field-row-2">
         <div className="field-row">
           <label className="field-label">Tipo cliente</label>

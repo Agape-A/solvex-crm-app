@@ -90,6 +90,17 @@ export interface Client {
   // direzione non lo assegna — vedi la policy "clients_select" in quella
   // migrazione.
   owner_id: string | null
+  // "Responsabile cliente" (colonna aggiunta in 0041_responsabile_cliente.sql,
+  // richiesta di Andrea, ott 2026): il tecnico assegnato a questo cliente —
+  // concetto distinto e indipendente da "owner_id"/"Utente" qui sopra (che
+  // resta il commerciale, automatico e bloccato per tutti). Null = "non
+  // assegnato". Assegnabile/modificabile solo da dirigente/amministrazione
+  // (enforce_client_tech_responsible_permissions in quella stessa
+  // migrazione); serve anche come filtro nella lista clienti, utilizzabile
+  // da chiunque, senza che questo cambi la visibilità dei clienti per il
+  // tecnico (resta quella di 0038, basata su "requires_tech_validation"
+  // sulle trattative).
+  tech_responsible_id: string | null
   tags: string[]
   created_at: string
 }
