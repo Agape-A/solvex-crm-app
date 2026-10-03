@@ -1,4 +1,4 @@
-import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
+import { useEffect, useState, type ChangeEvent, type FormEvent, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabaseClient'
@@ -9,9 +9,11 @@ import {
   APPOINTMENT_TYPE_LABELS,
   CLIENT_TYPE_LABELS,
   DEAL_STAGES,
+  type ActivityLogEntry,
   type Appointment,
   type Client,
   type ClientType,
+  type CommentRefTable,
   type Deal,
   type MarketingContact,
   type Profile,
@@ -378,46 +380,119 @@ function buildTimeline(deals: Deal[], requests: Request[], appointments: Appoint
   return items.sort((a, b) => b.date.getTime() - a.date.getTime())
 }
 
+// Cronologia degli eventi registrati automaticamente sul record (creazione,
+// cambio fase/stato...) — tabella generica "activity_log", già usata per il
+// feed della Dashboard ma non ancora per-record da nessuna parte. Qui
+// diventa gli "sviluppi" di una singola attività, richiesti da Andrea (ott
+// 2026): "cliccando sull'attività si deve vedere tutte le informazioni
+// collegate, sviluppi commenti note chat tutto".
+function TimelineActivityLog({
+  refTable,
+  refId,
+  assignees,
+}: {
+  refTable: CommentRefTable
+  refId: string
+  assignees: Profile[]
+}) {
+  const [entries, setEntries] = useState<ActivityLogEntry[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    let cancelled = false
+    setLoading(true)
+    supabase
+      .from('activity_log')
+      .select('*')
+      .eq('ref_table', refTable)
+      .eq('ref_id', refId)
+      .order('created_at')
+      .then(({ data }) => {
+        if (cancelled) return
+        setEntries((data as ActivityLogEntry[]) ?? [])
+        setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [refTable, refId])
+
+  return (
+    <div className="client-timeline-log">
+      <div className="section-title client-deals-title">Sviluppi</div>
+      {loading && <p className="muted">Caricamento…</p>}
+      {!loading && entries.length === 0 && <p className="muted">Nessuno sviluppo registrato.</p>}
+      {!loading && entries.length > 0 && (
+        <ul className="client-timeline-log-list">
+          {entries.map((e) => (
+            <li key={e.id}>
+              <span className="muted">
+                {new Date(e.created_at).toLocaleString('it-IT', { dateStyle: 'medium', timeStyle: 'short' })}
+              </span>{' '}
+              — {e.message}
+              {e.actor_id && (
+                <span className="muted"> · {assignees.find((p) => p.id === e.actor_id)?.full_name ?? 'Utente'}</span>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 // Dettaglio completo di una voce della cronologia, mostrato quando la riga
-// viene espansa. Per le trattative riusa ActivityDetailsView di
-// Pipeline.tsx (stessa resa dei campi guidati vista lì), per richieste e
-// appuntamenti mostra i campi propri di quei moduli.
+// viene espansa (richiesta di Andrea, ott 2026: "cliccando sull'attività si
+// deve vedere tutte le informazioni collegate, sviluppi commenti note chat
+// tutto"). Per le trattative riusa ActivityDetailsView di Pipeline.tsx
+// (stessa resa dei campi guidati vista lì), per richieste e appuntamenti
+// mostra i campi propri di quei moduli — e per tutte, in fondo, gli
+// "sviluppi" (TimelineActivityLog qui sopra) e lo stesso CommentThread
+// (commenti + "manda come richiesta a…", la chat del record) già usato
+// nelle pagine Pipeline/Richieste/Calendario per questo stesso record.
 function TimelineItemDetail({ item, assignees }: { item: TimelineItem; assignees: Profile[] }) {
+  const refTable: CommentRefTable =
+    item.kind === 'trattativa' ? 'deals' : item.kind === 'richiesta' ? 'requests' : 'appointments'
+  const refId = item.kind === 'trattativa' ? item.deal.id : item.kind === 'richiesta' ? item.request.id : item.appointment.id
+
+  let fields: ReactNode
   if (item.kind === 'trattativa') {
-    return (
-      <div className="client-timeline-detail">
+    fields = (
+      <>
         <ActivityDetailsView details={item.deal.activity_details} />
         {item.deal.note && (
           <p className="muted"><strong>Nota:</strong> {item.deal.note}</p>
         )}
-      </div>
+      </>
     )
-  }
-  if (item.kind === 'richiesta') {
+  } else if (item.kind === 'richiesta') {
     const r = item.request
-    return (
-      <div className="client-timeline-detail">
-        <div className="activity-details-grid">
-          <span><strong>Mittente:</strong> {r.sender}</span>
-          <span><strong>Tipo:</strong> {r.type}</span>
-          <span><strong>Reparto:</strong> {r.department}</span>
-          <span><strong>Priorità:</strong> {r.priority}</span>
-          {r.due_date && <span><strong>Scadenza:</strong> {new Date(r.due_date).toLocaleDateString('it-IT')}</span>}
-          {r.body && <span><strong>Testo:</strong> {r.body}</span>}
-        </div>
+    fields = (
+      <div className="activity-details-grid">
+        <span><strong>Mittente:</strong> {r.sender}</span>
+        <span><strong>Tipo:</strong> {r.type}</span>
+        <span><strong>Reparto:</strong> {r.department}</span>
+        <span><strong>Priorità:</strong> {r.priority}</span>
+        {r.due_date && <span><strong>Scadenza:</strong> {new Date(r.due_date).toLocaleDateString('it-IT')}</span>}
+        {r.body && <span><strong>Testo:</strong> {r.body}</span>}
       </div>
     )
-  }
-  const a = item.appointment
-  const assignee = a.assignee_id ? assignees.find((p) => p.id === a.assignee_id) : undefined
-  return (
-    <div className="client-timeline-detail">
+  } else {
+    const a = item.appointment
+    const assignee = a.assignee_id ? assignees.find((p) => p.id === a.assignee_id) : undefined
+    fields = (
       <div className="activity-details-grid">
         <span><strong>Quando:</strong> {new Date(a.appointment_at).toLocaleString('it-IT', { dateStyle: 'full', timeStyle: 'short' })}</span>
         <span><strong>Tipo:</strong> {APPOINTMENT_TYPE_LABELS[a.type]}</span>
         {assignee && <span><strong>Assegnato a:</strong> {assignee.full_name}</span>}
         {a.note && <span><strong>Nota:</strong> {a.note}</span>}
       </div>
+    )
+  }
+
+  return (
+    <div className="client-timeline-detail">
+      {fields}
+      <TimelineActivityLog refTable={refTable} refId={refId} assignees={assignees} />
+      <CommentThread refTable={refTable} refId={refId} refLabel={item.title} />
     </div>
   )
 }
@@ -488,7 +563,7 @@ function ClientDetail({
   const timeline = buildTimeline(deals, requests, appointments)
 
   return (
-    <>
+    <div className="client-detail-body">
       <div className="eyebrow">
         {CLIENT_TYPE_LABELS[client.client_type]} · {client.country}
       </div>
@@ -703,7 +778,7 @@ function ClientDetail({
           )}
         </div>
       )}
-    </>
+    </div>
   )
 }
 
