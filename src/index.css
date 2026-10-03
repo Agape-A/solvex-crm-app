@@ -290,17 +290,26 @@ a.tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border
 /* ---- pipeline kanban ---- */
 .view-wide { max-width: 2000px; transition: max-width .18s ease; }
 .main-expanded .view-wide { max-width: 2300px; }
-.kanban-board { display: flex; gap: 14px; overflow-x: auto; align-items: flex-start; padding-bottom: 10px; }
+/* Griglia invece di flex con una larghezza massima fissa per colonna (ott
+   2026): con sole 3 colonne in bacheca (tolte Chiuso Vinto/Perso, vedi
+   Pipeline.tsx KANBAN_STAGES) una larghezza massima pensata per 5 colonne
+   lasciava una fascia vuota enorme a destra su schermi larghi. "auto-fit" +
+   "minmax" fa sì che le colonne SI DIVIDANO SEMPRE tutta la larghezza
+   disponibile in parti uguali — qualunque sia il numero di colonne, oggi o
+   in futuro — con un minimo di 300px ciascuna per restare leggibili; sotto
+   quel minimo vanno a capo da sole, invece di restringersi troppo.
+   overflow-x resta come rete di sicurezza per viewport estremi. */
+.kanban-board { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 18px; overflow-x: auto; align-items: start; padding-bottom: 10px; }
 .kanban-col {
-  flex: 1 1 220px; min-width: 220px; max-width: 320px; background: var(--surface-2); border-radius: 12px; padding: 12px;
+  background: var(--surface-2); border-radius: 12px; padding: 16px;
   display: flex; flex-direction: column; gap: 10px; min-height: 80px; transition: background .15s ease;
 }
 .kanban-col.drag-over { background: var(--accent-soft); outline: 2px dashed var(--accent); outline-offset: -2px; }
-.kanban-col-head { display: flex; align-items: baseline; justify-content: space-between; font-weight: 700; font-size: 13px; padding: 0 2px; }
+.kanban-col-head { display: flex; align-items: baseline; justify-content: space-between; font-weight: 700; font-size: 13.5px; padding: 0 2px; }
 .kanban-col-total { font-weight: 600; font-size: 11.5px; }
-.kanban-cards { display: flex; flex-direction: column; gap: 8px; }
+.kanban-cards { display: flex; flex-direction: column; gap: 10px; }
 .kanban-empty { font-size: 12px; padding: 6px 2px; }
-.kanban-card { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; cursor: default; }
+.kanban-card { padding: 12px 14px; display: flex; flex-direction: column; gap: 8px; cursor: default; }
 .kanban-card[draggable="true"] { cursor: grab; }
 .kanban-card.dragging { opacity: 0.5; }
 .kanban-card.saving { opacity: 0.7; }
@@ -771,8 +780,7 @@ a.client-deal-row:hover { background: var(--surface-2); border-radius: 6px; }
   .cal-side { position: static; }
   .sidebar { display: none; }
   .tile-row, .req-layout { grid-template-columns: 1fr; }
-  .kanban-board { flex-direction: column; }
-  .kanban-col { flex: none; width: 100%; }
+  .kanban-board { grid-template-columns: 1fr; }
   .pipeline-summary { grid-template-columns: repeat(2, 1fr); }
   .pipeline-view-toggle { margin-left: 0; }
   .pcol-weighted, .pcol-action { display: none; }
