@@ -168,29 +168,51 @@ export interface PendingAssignment {
   dueDate: string
 }
 
+// "referente_contatto"/"mansione_referente" (chi è stato incontrato in
+// questa specifica interazione, e il suo ruolo) e "attachment_url"/
+// "attachment_name" (allegato generico: PDF, Excel, Word, JPEG) sono comuni
+// a ogni tipo di attività guidata — aggiunti a tutte le interfacce sotto
+// nella revisione "Nuovo Contatto" (ott 2026). I nomi dei tag sono stati
+// rinominati in quella stessa revisione: "PRIMA VISITA" → "PRIMO CONTATTO",
+// "VISITA COMMERCIALE CLIENTE" → "CONTATTO COMMERCIALE CLIENTE", "VISITA
+// TECNICA CLIENTE" → "CONTATTO TECNICO CLIENTE" — i record già esistenti
+// sono stati aggiornati con una migrazione dati (vedi
+// 0040_nuovo_contatto.sql) così il vecchio e il nuovo nome non convivono.
 export interface DealActivityPrimaVisita {
-  tag: 'PRIMA VISITA'
+  tag: 'PRIMO CONTATTO'
   incontro: IncontroTipo | ''
   temi_trattati: string
   prodotti_presentati: string
   prossimi_passi: string
+  referente_contatto: string
+  mansione_referente: string
+  attachment_url: string | null
+  attachment_name: string | null
 }
 
 export interface DealActivityVisitaCommerciale {
-  tag: 'VISITA COMMERCIALE CLIENTE'
+  tag: 'CONTATTO COMMERCIALE CLIENTE'
   incontro: IncontroTipo | ''
   temi_trattati: string
   prodotti_presentati: string
   prossimi_passi: string
+  referente_contatto: string
+  mansione_referente: string
+  attachment_url: string | null
+  attachment_name: string | null
 }
 
 export interface DealActivityVisitaTecnica {
-  tag: 'VISITA TECNICA CLIENTE'
+  tag: 'CONTATTO TECNICO CLIENTE'
   incontro: IncontroTipo | ''
   attivita_svolte: string
   articoli_provati: string
   prodotti_testati: string
   prossimi_passi: string
+  referente_contatto: string
+  mansione_referente: string
+  attachment_url: string | null
+  attachment_name: string | null
 }
 
 // I campi specifici per "natura del reclamo" sono qui tutti insieme (invece
@@ -212,6 +234,8 @@ export interface DealActivityReclamoCliente {
   attachment_name: string | null
   prossimi_passi: string
   urgenza: Urgenza | ''
+  referente_contatto: string
+  mansione_referente: string
 }
 
 export interface DealActivityRiunioneInterna {
@@ -219,6 +243,10 @@ export interface DealActivityRiunioneInterna {
   reparti: string[]
   persone_presenti: string
   temi_trattati: string
+  referente_contatto: string
+  mansione_referente: string
+  attachment_url: string | null
+  attachment_name: string | null
 }
 
 // "Richiesta Analisi Campione Cliente" — equivalente lato Pipeline clienti
@@ -245,6 +273,8 @@ export interface DealActivityRichiestaAnalisiCampioneCliente {
   prossimi_passi: string
   urgenza: Urgenza | ''
   richiesto_da: string
+  referente_contatto: string
+  mansione_referente: string
 }
 
 export type DealActivityDetails =
@@ -444,9 +474,14 @@ export interface ActivityLogEntry {
 // vinta o persa. Il valore enum "trattativa" resta nel database (i pochi
 // vecchi record di test sono stati spostati su "proposta" dalla migration
 // 0019) ma non è più una fase selezionabile.
+// Etichette rinominate nella revisione "Nuovo Contatto" (ott 2026): "Nuovo
+// Lead" → "Nuovo Contatto", "Primo Contatto" → "Sviluppo Contatto" (il nome
+// "Primo Contatto" è stato liberato per il tipo di attività guidata
+// omonimo, ex "Prima Visita" — vedi i tipi DealActivity* più sopra). Gli id
+// delle fasi ('lead', 'qualificato'...) non cambiano: sono solo etichette.
 export const DEAL_STAGES: { id: DealStage; label: string }[] = [
-  { id: 'lead', label: 'Nuovo Lead' },
-  { id: 'qualificato', label: 'Primo Contatto' },
+  { id: 'lead', label: 'Nuovo Contatto' },
+  { id: 'qualificato', label: 'Sviluppo Contatto' },
   { id: 'proposta', label: 'Proposta Inviata' },
   { id: 'vinto', label: 'Chiuso Vinto' },
   { id: 'perso', label: 'Chiuso Perso' },

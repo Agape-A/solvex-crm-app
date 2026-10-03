@@ -139,11 +139,12 @@ export function Pipeline() {
   // niente trascinamento, niente cambio fase o proprietario — il vero
   // controllo resta comunque lato server (0003_triggers.sql).
   const canEditFields = profile?.role === 'commerciale' || profile?.role === 'dirigente' || profile?.role === 'amministrazione'
-  // Un commerciale può assegnare una trattativa solo a se stesso (la RLS lo
-  // impone: "owner_id = auth.uid() or owner_id is null"), quindi per lui il
-  // menu "Proprietario" non ha senso — solo dirigente/amministrazione
-  // possono davvero riassegnare una trattativa a qualcun altro.
-  const isDirigente = profile?.role === 'dirigente' || profile?.role === 'amministrazione'
+  // "Utente" (ex "Proprietario") è sempre e solo chi crea la trattativa —
+  // nessuno può più cambiarlo a mano, nemmeno dirigente/amministrazione
+  // (richiesta di Andrea, ott 2026): niente più menu di riassegnazione da
+  // nessuna parte, solo una scritta informativa. La RLS lo impone comunque
+  // in scrittura (owner_id = auth.uid() all'inserimento — vedi
+  // 0040_nuovo_contatto.sql).
 
   async function loadDeals() {
     setLoading(true)
@@ -206,15 +207,6 @@ export function Pipeline() {
     }
   }
 
-  async function updateOwner(deal: Deal, ownerId: string | null) {
-    const { error } = await supabase.from('deals').update({ owner_id: ownerId }).eq('id', deal.id)
-    if (error) {
-      alert('Non è stato possibile aggiornare il proprietario: ' + error.message)
-      return
-    }
-    setDeals((ds) => ds.map((d) => (d.id === deal.id ? { ...d, owner_id: ownerId } : d)))
-  }
-
   async function updateNote(deal: Deal, note: string) {
     const { error } = await supabase.from('deals').update({ note }).eq('id', deal.id)
     if (error) alert('Non è stato possibile salvare la nota: ' + error.message)
@@ -264,25 +256,23 @@ export function Pipeline() {
         <h1>Pipeline clienti</h1>
         {canCreate && (
           <button className="btn btn-primary" onClick={() => setShowForm((v) => !v)}>
-            {showForm ? 'Annulla' : '+ Nuovo lead'}
+            {showForm ? 'Annulla' : '+ Nuovo Contatto'}
           </button>
         )}
       </div>
       {canCreate && !showForm && (
         <p className="muted">
-          Un nuovo lead si apre da qui, con il pulsante "+ Nuovo lead" qui sopra — entra direttamente in pipeline
-          nella fase "Nuovo Lead".
+          Un nuovo contatto si apre da qui, con il pulsante "+ Nuovo Contatto" qui sopra — entra direttamente in
+          pipeline nella fase "Nuovo Contatto".
         </p>
       )}
 
       {showForm && (
         <NewDealForm
           clients={clients}
-          owners={ownerOptions}
           assignees={profiles}
           defaultOwnerId={profile.id}
           createdByName={profile.full_name}
-          isDirigente={isDirigente}
           onCreated={() => { setShowForm(false); loadDeals() }}
         />
       )}
@@ -299,7 +289,7 @@ export function Pipeline() {
               onChange={(e) => setSearch(e.target.value)}
             />
             <select value={ownerFilter} onChange={(e) => setOwnerFilter(e.target.value)}>
-              <option value="">Tutti i proprietari</option>
+              <option value="">Tutti gli utenti</option>
               {ownerOptions.map((p) => (
                 <option key={p.id} value={p.id}>
                   {p.full_name}
@@ -376,7 +366,6 @@ export function Pipeline() {
                           highlighted={highlightedId === deal.id}
                           canEditFields={canEditFields}
                           canDrag={canEditFields}
-                          isDirigente={isDirigente}
                           expanded={expandedId === deal.id}
                           owners={ownerOptions}
                           onToggleExpand={() => setExpandedId((id) => (id === deal.id ? null : deal.id))}
@@ -390,7 +379,6 @@ export function Pipeline() {
                             setDragOverStage(null)
                           }}
                           onChangeStage={(s) => updateStage(deal, s)}
-                          onChangeOwner={(id) => updateOwner(deal, id)}
                           onChangeNote={(note) => updateNote(deal, note)}
                           onChangeTechValidation={(v) => updateTechValidation(deal, v)}
                         />
@@ -411,7 +399,7 @@ export function Pipeline() {
                   Valore
                 </button>
                 <span className="pcol-weighted">Pesato</span>
-                <span className="pcol-owner">Prop.</span>
+                <span className="pcol-owner">Utente</span>
                 <button type="button" className="pcol-action" onClick={() => setSortBy('azione')}>
                   Prossima azione
                 </button>
@@ -455,10 +443,8 @@ export function Pipeline() {
                           <DealDetails
                             deal={deal}
                             canEditFields={canEditFields}
-                            isDirigente={isDirigente}
                             owners={ownerOptions}
                             onChangeStage={(s) => updateStage(deal, s)}
-                            onChangeOwner={(id) => updateOwner(deal, id)}
                             onChangeNote={(note) => updateNote(deal, note)}
                             onChangeTechValidation={(v) => updateTechValidation(deal, v)}
                           />
@@ -598,32 +584,46 @@ function StagePath({
 function ActivityDetailsView({ details }: { details: DealActivityDetails }) {
   if (!details) return null
 
-  if (details.tag === 'PRIMA VISITA' || details.tag === 'VISITA COMMERCIALE CLIENTE') {
+  if (details.tag === 'PRIMO CONTATTO' || details.tag === 'CONTATTO COMMERCIALE CLIENTE') {
     return (
       <div className="activity-details-view">
         <span className="activity-details-title">
-          Dettagli · {details.tag === 'PRIMA VISITA' ? 'Prima visita' : 'Visita commerciale cliente'}
+          Dettagli · {details.tag === 'PRIMO CONTATTO' ? 'Primo contatto' : 'Contatto commerciale cliente'}
         </span>
         <div className="activity-details-grid">
           {details.incontro && <span><strong>Incontro:</strong> {INCONTRO_TIPO_LABELS[details.incontro]}</span>}
           {details.temi_trattati && <span><strong>Temi trattati:</strong> {details.temi_trattati}</span>}
           {details.prodotti_presentati && <span><strong>Prodotti presentati:</strong> {details.prodotti_presentati}</span>}
           {details.prossimi_passi && <span><strong>Prossimi passi:</strong> {details.prossimi_passi}</span>}
+          {details.referente_contatto && <span><strong>Referente Contatto:</strong> {details.referente_contatto}</span>}
+          {details.mansione_referente && <span><strong>Mansione Referente:</strong> {details.mansione_referente}</span>}
+          {details.attachment_url && (
+            <span>
+              <strong>Allegato:</strong> <a href={details.attachment_url} target="_blank" rel="noreferrer">📎 {details.attachment_name}</a>
+            </span>
+          )}
         </div>
       </div>
     )
   }
 
-  if (details.tag === 'VISITA TECNICA CLIENTE') {
+  if (details.tag === 'CONTATTO TECNICO CLIENTE') {
     return (
       <div className="activity-details-view">
-        <span className="activity-details-title">Dettagli · Visita tecnica cliente</span>
+        <span className="activity-details-title">Dettagli · Contatto tecnico cliente</span>
         <div className="activity-details-grid">
           {details.incontro && <span><strong>Incontro:</strong> {INCONTRO_TIPO_LABELS[details.incontro]}</span>}
           {details.attivita_svolte && <span><strong>Attività svolte:</strong> {details.attivita_svolte}</span>}
           {details.articoli_provati && <span><strong>Articoli provati:</strong> {details.articoli_provati}</span>}
           {details.prodotti_testati && <span><strong>Prodotti testati:</strong> {details.prodotti_testati}</span>}
           {details.prossimi_passi && <span><strong>Prossimi passi:</strong> {details.prossimi_passi}</span>}
+          {details.referente_contatto && <span><strong>Referente Contatto:</strong> {details.referente_contatto}</span>}
+          {details.mansione_referente && <span><strong>Mansione Referente:</strong> {details.mansione_referente}</span>}
+          {details.attachment_url && (
+            <span>
+              <strong>Allegato:</strong> <a href={details.attachment_url} target="_blank" rel="noreferrer">📎 {details.attachment_name}</a>
+            </span>
+          )}
         </div>
       </div>
     )
@@ -650,6 +650,8 @@ function ActivityDetailsView({ details }: { details: DealActivityDetails }) {
           )}
           {details.prossimi_passi && <span><strong>Prossimi passi:</strong> {details.prossimi_passi}</span>}
           {details.urgenza && <span><strong>Urgenza:</strong> {URGENZA_LABELS[details.urgenza]}</span>}
+          {details.referente_contatto && <span><strong>Referente Contatto:</strong> {details.referente_contatto}</span>}
+          {details.mansione_referente && <span><strong>Mansione Referente:</strong> {details.mansione_referente}</span>}
         </div>
       </div>
     )
@@ -663,6 +665,13 @@ function ActivityDetailsView({ details }: { details: DealActivityDetails }) {
           {details.reparti.length > 0 && <span><strong>Reparti:</strong> {details.reparti.join(', ')}</span>}
           {details.persone_presenti && <span><strong>Persone presenti:</strong> {details.persone_presenti}</span>}
           {details.temi_trattati && <span><strong>Temi trattati:</strong> {details.temi_trattati}</span>}
+          {details.referente_contatto && <span><strong>Referente Contatto:</strong> {details.referente_contatto}</span>}
+          {details.mansione_referente && <span><strong>Mansione Referente:</strong> {details.mansione_referente}</span>}
+          {details.attachment_url && (
+            <span>
+              <strong>Allegato:</strong> <a href={details.attachment_url} target="_blank" rel="noreferrer">📎 {details.attachment_name}</a>
+            </span>
+          )}
         </div>
       </div>
     )
@@ -697,6 +706,8 @@ function ActivityDetailsView({ details }: { details: DealActivityDetails }) {
           {details.metodo_test && <span><strong>Metodo test:</strong> {details.metodo_test}</span>}
           {details.prossimi_passi && <span><strong>Prossimi passi:</strong> {details.prossimi_passi}</span>}
           {details.urgenza && <span><strong>Urgenza:</strong> {URGENZA_LABELS[details.urgenza]}</span>}
+          {details.referente_contatto && <span><strong>Referente Contatto:</strong> {details.referente_contatto}</span>}
+          {details.mansione_referente && <span><strong>Mansione Referente:</strong> {details.mansione_referente}</span>}
         </div>
       </div>
     )
@@ -708,21 +719,17 @@ function ActivityDetailsView({ details }: { details: DealActivityDetails }) {
 function DealDetails({
   deal,
   canEditFields,
-  isDirigente,
   compact = false,
   owners,
   onChangeStage,
-  onChangeOwner,
   onChangeNote,
   onChangeTechValidation,
 }: {
   deal: Deal
   canEditFields: boolean
-  isDirigente: boolean
   compact?: boolean
   owners: Profile[]
   onChangeStage: (s: DealStage) => void
-  onChangeOwner: (ownerId: string | null) => void
   onChangeNote: (note: string) => void
   onChangeTechValidation: (value: boolean) => void
 }) {
@@ -730,23 +737,10 @@ function DealDetails({
     <div className="kanban-card-expanded" onClick={(e) => e.stopPropagation()}>
       <StagePath deal={deal} canEdit={canEditFields} compact={compact} onChangeStage={onChangeStage} />
       <ActivityDetailsView details={deal.activity_details} />
-      {canEditFields && (
-        <div className="field-row">
-          <label className="field-label">Proprietario</label>
-          {isDirigente ? (
-            <select value={deal.owner_id ?? ''} onChange={(e) => onChangeOwner(e.target.value || null)}>
-              <option value="">— Nessuno —</option>
-              {owners.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.full_name}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <span>{owners.find((p) => p.id === deal.owner_id)?.full_name ?? '— Nessuno —'}</span>
-          )}
-        </div>
-      )}
+      <div className="field-row">
+        <label className="field-label">Utente</label>
+        <span>{owners.find((p) => p.id === deal.owner_id)?.full_name ?? '— Nessuno —'}</span>
+      </div>
       {canEditFields && (
         <label className="field-checkbox">
           <input
@@ -782,14 +776,12 @@ function DealCard({
   highlighted,
   canEditFields,
   canDrag,
-  isDirigente,
   expanded,
   owners,
   onToggleExpand,
   onDragStart,
   onDragEnd,
   onChangeStage,
-  onChangeOwner,
   onChangeNote,
   onChangeTechValidation,
 }: {
@@ -801,14 +793,12 @@ function DealCard({
   highlighted: boolean
   canEditFields: boolean
   canDrag: boolean
-  isDirigente: boolean
   expanded: boolean
   owners: Profile[]
   onToggleExpand: () => void
   onDragStart: (e: DragEvent<HTMLDivElement>) => void
   onDragEnd: () => void
   onChangeStage: (s: DealStage) => void
-  onChangeOwner: (ownerId: string | null) => void
   onChangeNote: (note: string) => void
   onChangeTechValidation: (value: boolean) => void
 }) {
@@ -875,11 +865,9 @@ function DealCard({
         <DealDetails
           deal={deal}
           canEditFields={canEditFields}
-          isDirigente={isDirigente}
           compact
           owners={owners}
           onChangeStage={onChangeStage}
-          onChangeOwner={onChangeOwner}
           onChangeNote={onChangeNote}
           onChangeTechValidation={onChangeTechValidation}
         />
@@ -891,11 +879,12 @@ function DealCard({
 const NEW_CLIENT_OPTION = '__nuovo__'
 
 const CLIENT_TYPE_OPTIONS: ClientType[] = ['conceria', 'distributore', 'azienda_chimica']
-// Le visite fisiche non includono "Telefonico" (quello è per il contatto
-// telefonico vero e proprio, un altro tag) — solo per le visite tecniche lo
-// schema di Andrea non prevede nemmeno "Fiera".
-const VISITA_INCONTRO_OPTIONS: IncontroTipo[] = ['in_sede', 'presso_cliente', 'fiera']
-const VISITA_TECNICA_INCONTRO_OPTIONS: IncontroTipo[] = ['in_sede', 'presso_cliente']
+// "Telefonico" aggiunto ai tipi di incontro per entrambi i blocchi
+// (richiesta di Andrea, ott 2026) — prima era escluso qui perché pensato
+// solo per un contatto telefonico vero e proprio; per le visite tecniche lo
+// schema di Andrea non prevede comunque "Fiera".
+const VISITA_INCONTRO_OPTIONS: IncontroTipo[] = ['in_sede', 'presso_cliente', 'fiera', 'telefonico']
+const VISITA_TECNICA_INCONTRO_OPTIONS: IncontroTipo[] = ['in_sede', 'presso_cliente', 'telefonico']
 const RICEZIONE_OPTIONS: RicezioneReclamo[] = ['mail', 'telefonica', 'di_persona']
 const NATURA_OPTIONS: NaturaReclamo[] = ['prodotto', 'documentale', 'logistica', 'servizio']
 const URGENZA_OPTIONS: Urgenza[] = ['bassa', 'media', 'alta']
@@ -903,11 +892,15 @@ const URGENZA_OPTIONS: Urgenza[] = ['bassa', 'media', 'alta']
 // I 5 tipi di attività guidati per il lead (schema Excel di Andrea, set
 // 2026) — sostituiscono i due tag guidati precedenti (Presentazione
 // aziendale, Richiesta prezzo), che restano nella lista tag generale ma non
-// più come opzioni qui.
+// più come opzioni qui. Rinominati nella revisione "Nuovo Contatto" (ott
+// 2026): "PRIMA VISITA" → "PRIMO CONTATTO", "VISITA COMMERCIALE CLIENTE" →
+// "CONTATTO COMMERCIALE CLIENTE", "VISITA TECNICA CLIENTE" → "CONTATTO
+// TECNICO CLIENTE" — vedi 0040_nuovo_contatto.sql per la migrazione dei
+// record già esistenti.
 const ACTIVITY_TYPES = [
-  'PRIMA VISITA',
-  'VISITA COMMERCIALE CLIENTE',
-  'VISITA TECNICA CLIENTE',
+  'PRIMO CONTATTO',
+  'CONTATTO COMMERCIALE CLIENTE',
+  'CONTATTO TECNICO CLIENTE',
   'RECLAMO CLIENTE',
   'RIUNIONE INTERNA',
   'RICHIESTA ANALISI CAMPIONE CLIENTE',
@@ -918,19 +911,15 @@ const TIPO_ANALISI_OPTIONS_CLIENTE: TipoAnalisi[] = ['comparativa', 'nuovo_prodo
 
 function NewDealForm({
   clients,
-  owners,
   assignees,
   defaultOwnerId,
   createdByName,
-  isDirigente,
   onCreated,
 }: {
   clients: Client[]
-  owners: Profile[]
   assignees: Profile[]
   defaultOwnerId: string
   createdByName: string
-  isDirigente: boolean
   onCreated: () => void
 }) {
   const [clientId, setClientId] = useState('')
@@ -942,7 +931,6 @@ function NewDealForm({
   const [newClientCountry, setNewClientCountry] = useState('Italia')
   const [newClientContact, setNewClientContact] = useState('')
 
-  const [ownerId, setOwnerId] = useState(defaultOwnerId)
   const [requiresTechValidation, setRequiresTechValidation] = useState(false)
   const [saving, setSaving] = useState(false)
 
@@ -951,6 +939,13 @@ function NewDealForm({
   // più in deals.tags, che l'interfaccia non usa più (i tag torneranno più
   // avanti, con un disegno da rivedere).
   const [activityTag, setActivityTag] = useState('')
+
+  // Referente Contatto / Mansione Referente: comuni a ogni tipo di attività
+  // (richiesta di Andrea, ott 2026) — riferiti alla singola interazione, non
+  // alla scheda cliente, quindi vanno compilati ad ogni "Nuovo Contatto" e
+  // finiscono in deals.activity_details insieme ai campi guidati del tag.
+  const [referenteContatto, setReferenteContatto] = useState('')
+  const [mansioneReferente, setMansioneReferente] = useState('')
 
   // PRIMA VISITA / VISITA COMMERCIALE CLIENTE (stessi campi)
   const [incontroVisita, setIncontroVisita] = useState<IncontroTipo | ''>('')
@@ -1084,10 +1079,10 @@ function NewDealForm({
   // anche altrove nell'interfaccia — bacheca, elenco), quindi lo popoliamo
   // da quello che il commerciale ha già scritto nei campi del tag.
   function deriveProductText(): string {
-    if (activityTag === 'PRIMA VISITA' || activityTag === 'VISITA COMMERCIALE CLIENTE') {
+    if (activityTag === 'PRIMO CONTATTO' || activityTag === 'CONTATTO COMMERCIALE CLIENTE') {
       return prodottiPresentati.trim() || activityTag
     }
-    if (activityTag === 'VISITA TECNICA CLIENTE') return prodottiTestati.trim() || activityTag
+    if (activityTag === 'CONTATTO TECNICO CLIENTE') return prodottiTestati.trim() || activityTag
     if (activityTag === 'RECLAMO CLIENTE') {
       return nomeProdotto.trim() || descrizioneProdotto.trim() || descrizioneServizio.trim() || activityTag
     }
@@ -1096,25 +1091,55 @@ function NewDealForm({
   }
 
   function validateActivityFields(): string | null {
-    if (activityTag === 'PRIMA VISITA' || activityTag === 'VISITA COMMERCIALE CLIENTE') {
-      if (!incontroVisita || !temiTrattatiVisita.trim() || !prodottiPresentati.trim() || !prossimiPassiVisita.trim()) {
-        return 'Compila incontro, temi trattati, prodotti presentati e prossimi passi.'
+    if (!referenteContatto.trim() || !mansioneReferente.trim()) {
+      return 'Compila referente contatto e mansione referente.'
+    }
+    if (activityTag === 'PRIMO CONTATTO' || activityTag === 'CONTATTO COMMERCIALE CLIENTE') {
+      if (
+        !incontroVisita ||
+        !temiTrattatiVisita.trim() ||
+        !prodottiPresentati.trim() ||
+        !prossimiPassiVisita.trim() ||
+        !prossimiPassiDataVisita
+      ) {
+        return 'Compila incontro, temi trattati, prodotti presentati, prossimi passi e data prossimi passi.'
       }
-    } else if (activityTag === 'VISITA TECNICA CLIENTE') {
-      if (!incontroTecnica || !attivitaSvolte.trim() || !articoliProvati.trim() || !prodottiTestati.trim() || !prossimiPassiTecnica.trim()) {
-        return 'Compila incontro, attività svolte, articoli provati, prodotti testati e prossimi passi.'
+    } else if (activityTag === 'CONTATTO TECNICO CLIENTE') {
+      if (
+        !incontroTecnica ||
+        !attivitaSvolte.trim() ||
+        !articoliProvati.trim() ||
+        !prodottiTestati.trim() ||
+        !prossimiPassiTecnica.trim() ||
+        !prossimiPassiDataTecnica
+      ) {
+        return 'Compila incontro, attività svolte, articoli provati, prodotti testati, prossimi passi e data prossimi passi.'
       }
     } else if (activityTag === 'RECLAMO CLIENTE') {
-      if (!ricezione || !natura || !descrizioneReclamo.trim() || !prossimiPassiReclamo.trim() || !urgenza) {
-        return 'Compila ricezione, natura del reclamo, descrizione, prossimi passi e urgenza.'
+      if (
+        !ricezione ||
+        !natura ||
+        !descrizioneReclamo.trim() ||
+        !prossimiPassiReclamo.trim() ||
+        !prossimiPassiDataReclamo ||
+        !urgenza
+      ) {
+        return 'Compila ricezione, natura del reclamo, descrizione, prossimi passi, data prossimi passi e urgenza.'
       }
     } else if (activityTag === 'RIUNIONE INTERNA') {
       if (reparti.length === 0 || !personePresenti.trim() || !temiTrattatiRiunione.trim()) {
         return 'Compila reparti coinvolti, persone presenti e temi trattati.'
       }
     } else if (activityTag === 'RICHIESTA ANALISI CAMPIONE CLIENTE') {
-      if (!descrizioneProdottoAnalisi.trim() || !tipoAnalisi || !prossimiPassiAnalisi.trim() || !urgenzaAnalisi || !richiestoDaAnalisi) {
-        return 'Compila descrizione prodotto, descrizione analisi, prossimi passi, urgenza e da chi è stata richiesta.'
+      if (
+        !descrizioneProdottoAnalisi.trim() ||
+        !tipoAnalisi ||
+        !prossimiPassiAnalisi.trim() ||
+        !prossimiPassiDataAnalisi ||
+        !urgenzaAnalisi ||
+        !richiestoDaAnalisi
+      ) {
+        return 'Compila descrizione prodotto, descrizione analisi, prossimi passi, data prossimi passi, urgenza e da chi è stata richiesta.'
       }
       if (tipoAnalisi === 'comparativa' && !prodottoDaComparare.trim()) return 'Indica il prodotto da comparare.'
       if (tipoAnalisi === 'nuovo_prodotto' && !descrizioneRichiesteAnalisi.trim()) {
@@ -1193,23 +1218,31 @@ function NewDealForm({
     let nextAction: string | null = null
     let reclamoPriority: Urgenza | undefined
 
-    if (activityTag === 'PRIMA VISITA' || activityTag === 'VISITA COMMERCIALE CLIENTE') {
+    if (activityTag === 'PRIMO CONTATTO' || activityTag === 'CONTATTO COMMERCIALE CLIENTE') {
       activityDetails = {
         tag: activityTag,
         incontro: incontroVisita,
         temi_trattati: temiTrattatiVisita.trim(),
         prodotti_presentati: prodottiPresentati.trim(),
         prossimi_passi: prossimiPassiVisita.trim(),
+        referente_contatto: referenteContatto.trim(),
+        mansione_referente: mansioneReferente.trim(),
+        attachment_url: attachmentUrl,
+        attachment_name: attachmentName,
       }
       nextAction = prossimiPassiDataVisita || null
-    } else if (activityTag === 'VISITA TECNICA CLIENTE') {
+    } else if (activityTag === 'CONTATTO TECNICO CLIENTE') {
       activityDetails = {
-        tag: 'VISITA TECNICA CLIENTE',
+        tag: 'CONTATTO TECNICO CLIENTE',
         incontro: incontroTecnica,
         attivita_svolte: attivitaSvolte.trim(),
         articoli_provati: articoliProvati.trim(),
         prodotti_testati: prodottiTestati.trim(),
         prossimi_passi: prossimiPassiTecnica.trim(),
+        referente_contatto: referenteContatto.trim(),
+        mansione_referente: mansioneReferente.trim(),
+        attachment_url: attachmentUrl,
+        attachment_name: attachmentName,
       }
       nextAction = prossimiPassiDataTecnica || null
     } else if (activityTag === 'RECLAMO CLIENTE') {
@@ -1228,6 +1261,8 @@ function NewDealForm({
         attachment_name: attachmentName,
         prossimi_passi: prossimiPassiReclamo.trim(),
         urgenza,
+        referente_contatto: referenteContatto.trim(),
+        mansione_referente: mansioneReferente.trim(),
       }
       nextAction = prossimiPassiDataReclamo || null
       reclamoPriority = urgenza || undefined
@@ -1237,6 +1272,10 @@ function NewDealForm({
         reparti,
         persone_presenti: personePresenti.trim(),
         temi_trattati: temiTrattatiRiunione.trim(),
+        referente_contatto: referenteContatto.trim(),
+        mansione_referente: mansioneReferente.trim(),
+        attachment_url: attachmentUrl,
+        attachment_name: attachmentName,
       }
     } else if (activityTag === 'RICHIESTA ANALISI CAMPIONE CLIENTE') {
       activityDetails = {
@@ -1254,6 +1293,8 @@ function NewDealForm({
         prossimi_passi: prossimiPassiAnalisi.trim(),
         urgenza: urgenzaAnalisi,
         richiesto_da: richiestoDaAnalisi,
+        referente_contatto: referenteContatto.trim(),
+        mansione_referente: mansioneReferente.trim(),
       }
       nextAction = prossimiPassiDataAnalisi || null
       reclamoPriority = urgenzaAnalisi || undefined
@@ -1266,7 +1307,7 @@ function NewDealForm({
         client_name: resolvedClientName,
         product: deriveProductText(),
         stage: 'lead',
-        owner_id: ownerId || null,
+        owner_id: defaultOwnerId,
         requires_tech_validation: requiresTechValidation,
         activity_details: activityDetails,
         next_action: nextAction,
@@ -1358,19 +1399,19 @@ function NewDealForm({
       )}
 
       <div className="field-row">
-        <label className="field-label">Proprietario</label>
-        {isDirigente ? (
-          <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
-            <option value="">— Nessuno —</option>
-            {owners.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.full_name}
-              </option>
-            ))}
-          </select>
-        ) : (
-          <span>{owners.find((p) => p.id === ownerId)?.full_name ?? '— Tu —'}</span>
-        )}
+        <label className="field-label">Utente</label>
+        <span>{createdByName}</span>
+      </div>
+
+      <div className="field-row-2">
+        <div className="field-row">
+          <label className="field-label">Referente Contatto</label>
+          <input value={referenteContatto} onChange={(e) => setReferenteContatto(e.target.value)} required />
+        </div>
+        <div className="field-row">
+          <label className="field-label">Mansione Referente</label>
+          <input value={mansioneReferente} onChange={(e) => setMansioneReferente(e.target.value)} required />
+        </div>
       </div>
 
       <label className="field-checkbox">
@@ -1394,9 +1435,11 @@ function NewDealForm({
         </select>
       </div>
 
-      {(activityTag === 'PRIMA VISITA' || activityTag === 'VISITA COMMERCIALE CLIENTE') && (
+      {(activityTag === 'PRIMO CONTATTO' || activityTag === 'CONTATTO COMMERCIALE CLIENTE') && (
         <div className="activity-fields-block">
-          <span className="activity-fields-title">{activityTag === 'PRIMA VISITA' ? 'Prima visita' : 'Visita commerciale cliente'}</span>
+          <span className="activity-fields-title">
+            {activityTag === 'PRIMO CONTATTO' ? 'Primo contatto' : 'Contatto commerciale cliente'}
+          </span>
           <div className="field-row">
             <label className="field-label">Incontro</label>
             <select value={incontroVisita} onChange={(e) => setIncontroVisita(e.target.value as IncontroTipo)} required>
@@ -1423,17 +1466,35 @@ function NewDealForm({
             </div>
             <div className="field-row">
               <label className="field-label">Data prossimi passi</label>
-              <input type="date" value={prossimiPassiDataVisita} onChange={(e) => setProssimiPassiDataVisita(e.target.value)} />
-              <span className="muted">Facoltativa — diventa la prossima azione schedulata sul lead.</span>
+              <input
+                type="date"
+                value={prossimiPassiDataVisita}
+                onChange={(e) => setProssimiPassiDataVisita(e.target.value)}
+                required
+              />
             </div>
+          </div>
+          <div className="field-row">
+            <label className="field-label">Allega file (facoltativo)</label>
+            {attachmentUrl ? (
+              <div className="marketing-attachment-row">
+                <a href={attachmentUrl} target="_blank" rel="noreferrer">📎 {attachmentName}</a>
+                <button type="button" className="btn btn-ghost" onClick={() => { setAttachmentUrl(null); setAttachmentName(null) }}>
+                  Rimuovi
+                </button>
+              </div>
+            ) : (
+              <input type="file" accept=".pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg" onChange={handleFileChange} disabled={uploading} />
+            )}
+            {uploading && <span className="muted">Caricamento…</span>}
           </div>
           <ActivityAssignment profiles={assignees} assignments={assignments} onChange={setAssignments} />
         </div>
       )}
 
-      {activityTag === 'VISITA TECNICA CLIENTE' && (
+      {activityTag === 'CONTATTO TECNICO CLIENTE' && (
         <div className="activity-fields-block">
-          <span className="activity-fields-title">Visita tecnica cliente</span>
+          <span className="activity-fields-title">Contatto tecnico cliente</span>
           <div className="field-row">
             <label className="field-label">Incontro</label>
             <select value={incontroTecnica} onChange={(e) => setIncontroTecnica(e.target.value as IncontroTipo)} required>
@@ -1466,9 +1527,27 @@ function NewDealForm({
             </div>
             <div className="field-row">
               <label className="field-label">Data prossimi passi</label>
-              <input type="date" value={prossimiPassiDataTecnica} onChange={(e) => setProssimiPassiDataTecnica(e.target.value)} />
-              <span className="muted">Facoltativa — diventa la prossima azione schedulata sul lead.</span>
+              <input
+                type="date"
+                value={prossimiPassiDataTecnica}
+                onChange={(e) => setProssimiPassiDataTecnica(e.target.value)}
+                required
+              />
             </div>
+          </div>
+          <div className="field-row">
+            <label className="field-label">Allega file (facoltativo)</label>
+            {attachmentUrl ? (
+              <div className="marketing-attachment-row">
+                <a href={attachmentUrl} target="_blank" rel="noreferrer">📎 {attachmentName}</a>
+                <button type="button" className="btn btn-ghost" onClick={() => { setAttachmentUrl(null); setAttachmentName(null) }}>
+                  Rimuovi
+                </button>
+              </div>
+            ) : (
+              <input type="file" accept=".pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg" onChange={handleFileChange} disabled={uploading} />
+            )}
+            {uploading && <span className="muted">Caricamento…</span>}
           </div>
           <ActivityAssignment profiles={assignees} assignments={assignments} onChange={setAssignments} />
         </div>
@@ -1550,7 +1629,7 @@ function NewDealForm({
           )}
 
           <div className="field-row">
-            <label className="field-label">Allega foto/video (facoltativo)</label>
+            <label className="field-label">Allega file (facoltativo)</label>
             {attachmentUrl ? (
               <div className="marketing-attachment-row">
                 <a href={attachmentUrl} target="_blank" rel="noreferrer">📎 {attachmentName}</a>
@@ -1559,7 +1638,7 @@ function NewDealForm({
                 </button>
               </div>
             ) : (
-              <input type="file" onChange={handleFileChange} disabled={uploading} />
+              <input type="file" accept=".pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg" onChange={handleFileChange} disabled={uploading} />
             )}
             {uploading && <span className="muted">Caricamento…</span>}
           </div>
@@ -1576,8 +1655,12 @@ function NewDealForm({
             </div>
             <div className="field-row">
               <label className="field-label">Data prossimi passi</label>
-              <input type="date" value={prossimiPassiDataReclamo} onChange={(e) => setProssimiPassiDataReclamo(e.target.value)} />
-              <span className="muted">Facoltativa — diventa la prossima azione schedulata sul lead.</span>
+              <input
+                type="date"
+                value={prossimiPassiDataReclamo}
+                onChange={(e) => setProssimiPassiDataReclamo(e.target.value)}
+                required
+              />
             </div>
           </div>
 
@@ -1623,6 +1706,20 @@ function NewDealForm({
             <label className="field-label">Temi trattati</label>
             <textarea value={temiTrattatiRiunione} onChange={(e) => setTemiTrattatiRiunione(e.target.value)} required />
           </div>
+          <div className="field-row">
+            <label className="field-label">Allega file (facoltativo)</label>
+            {attachmentUrl ? (
+              <div className="marketing-attachment-row">
+                <a href={attachmentUrl} target="_blank" rel="noreferrer">📎 {attachmentName}</a>
+                <button type="button" className="btn btn-ghost" onClick={() => { setAttachmentUrl(null); setAttachmentName(null) }}>
+                  Rimuovi
+                </button>
+              </div>
+            ) : (
+              <input type="file" accept=".pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg" onChange={handleFileChange} disabled={uploading} />
+            )}
+            {uploading && <span className="muted">Caricamento…</span>}
+          </div>
           <ActivityAssignment profiles={assignees} assignments={assignments} onChange={setAssignments} />
         </div>
       )}
@@ -1650,7 +1747,12 @@ function NewDealForm({
                   </button>
                 </div>
               ) : (
-                <input type="file" onChange={handleSchedaTecnicaChange} disabled={uploadingSchedaTecnica} />
+                <input
+                  type="file"
+                  accept=".pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg"
+                  onChange={handleSchedaTecnicaChange}
+                  disabled={uploadingSchedaTecnica}
+                />
               )}
               {uploadingSchedaTecnica && <span className="muted">Caricamento…</span>}
             </div>
@@ -1664,7 +1766,12 @@ function NewDealForm({
                   </button>
                 </div>
               ) : (
-                <input type="file" onChange={handleMsdsChange} disabled={uploadingMsds} />
+                <input
+                  type="file"
+                  accept=".pdf,.xls,.xlsx,.doc,.docx,.jpg,.jpeg"
+                  onChange={handleMsdsChange}
+                  disabled={uploadingMsds}
+                />
               )}
               {uploadingMsds && <span className="muted">Caricamento…</span>}
             </div>
@@ -1718,8 +1825,12 @@ function NewDealForm({
             </div>
             <div className="field-row">
               <label className="field-label">Data prossimi passi</label>
-              <input type="date" value={prossimiPassiDataAnalisi} onChange={(e) => setProssimiPassiDataAnalisi(e.target.value)} />
-              <span className="muted">Facoltativa — diventa la prossima azione schedulata sul lead.</span>
+              <input
+                type="date"
+                value={prossimiPassiDataAnalisi}
+                onChange={(e) => setProssimiPassiDataAnalisi(e.target.value)}
+                required
+              />
             </div>
           </div>
 
