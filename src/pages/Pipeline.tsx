@@ -9,6 +9,9 @@ import {
   DEAL_STAGES,
   INCONTRO_TIPO_LABELS,
   NATURA_RECLAMO_LABELS,
+  PROPOSAL_TYPE_LABELS,
+  PROPOSAL_TYPES,
+  PROPOSAL_TYPES_REQUIRING_VALUE,
   REPARTI_RIUNIONE,
   RICEZIONE_RECLAMO_LABELS,
   TIPO_ANALISI_LABELS,
@@ -22,6 +25,7 @@ import {
   type NaturaReclamo,
   type PendingAssignment,
   type Profile,
+  type ProposalType,
   type RicezioneReclamo,
   type TipoAnalisi,
   type Urgenza,
@@ -61,6 +65,17 @@ const STAGE_PROBABILITY: Record<DealStage, number> = {
 // pulsante di avanzamento rapido, sempre ispirati a Salesforce.
 const PATH_STAGES: DealStage[] = ['lead', 'qualificato', 'proposta', 'vinto']
 
+// Colonne della Bacheca (ott 2026, richiesta di Andrea: "la vista generale
+// deve riportare le tre colonne Nuovo Contatto, Sviluppo Contatto e
+// Proposta Inviata... le attività chiuse vinte e chiuse perse devono essere
+// riportate direttamente nei report e analytics, per dare più spazio alla
+// grafica"). "Chiuso Vinto"/"Chiuso Perso" restano fasi valide — si chiude
+// una trattativa con i pulsanti "✓ Segna come vinta"/"Persa" già presenti
+// sulla card (vedi DealCard/StagePath più sotto, invariati), non più
+// trascinandola su una colonna — e restano raggiungibili nella vista Elenco
+// (che continua a mostrare tutte le fasi) e nei Report.
+const KANBAN_STAGES = DEAL_STAGES.filter((s) => s.id !== 'vinto' && s.id !== 'perso')
+
 function nextPathStage(stage: DealStage): DealStage | null {
   const idx = PATH_STAGES.indexOf(stage)
   if (idx === -1 || idx === PATH_STAGES.length - 1) return null
@@ -84,30 +99,44 @@ function isOverdue(dateStr: string): boolean {
   return new Date(dateStr) < new Date(new Date().toDateString())
 }
 
-type SortKey = 'recenti' | 'valore_desc' | 'valore_asc' | 'azione' | 'ferme'
+// Ordinamento della pipeline (rifatto ott 2026 su richiesta di Andrea: le
+// vecchie opzioni per valore/prossima azione sono sparite, sostituite da
+// queste 6 — le uniche richieste). "Vinti"/"Persi" portano in cima le
+// trattative in quella fase (le altre restano sotto, ordinate come
+// "Recenti"); "Utente"/"Cliente" sono alfabetici.
+type SortKey = 'recenti' | 'ferme' | 'vinti' | 'persi' | 'utente' | 'cliente'
 
 const SORT_OPTIONS: { id: SortKey; label: string }[] = [
-  { id: 'recenti', label: 'Più recenti' },
-  { id: 'valore_desc', label: 'Valore (dal più alto)' },
-  { id: 'valore_asc', label: 'Valore (dal più basso)' },
-  { id: 'azione', label: 'Prossima azione' },
-  { id: 'ferme', label: 'Ferme da più tempo' },
+  { id: 'recenti', label: 'Recenti' },
+  { id: 'ferme', label: 'Fermi da più tempo' },
+  { id: 'vinti', label: 'Vinti' },
+  { id: 'persi', label: 'Persi' },
+  { id: 'utente', label: 'Utente' },
+  { id: 'cliente', label: 'Cliente' },
 ]
 
-function compareDeals(a: Deal, b: Deal, sortBy: SortKey): number {
+// "ownerNameById" serve solo per l'ordinamento "Utente" (il nome
+// dell'assegnatario non è un campo diretto di Deal, va risolto da
+// owner_id — stessa mappa "ownerMap" già calcolata nel componente,
+// trasformata in nome per il confronto alfabetico).
+function compareDeals(a: Deal, b: Deal, sortBy: SortKey, ownerNameById: Map<string, string>): number {
   switch (sortBy) {
-    case 'valore_desc':
-      return Number(b.value_estimate) - Number(a.value_estimate)
-    case 'valore_asc':
-      return Number(a.value_estimate) - Number(b.value_estimate)
-    case 'azione': {
-      if (a.next_action && b.next_action) return new Date(a.next_action).getTime() - new Date(b.next_action).getTime()
-      if (a.next_action) return -1
-      if (b.next_action) return 1
-      return 0
-    }
     case 'ferme':
       return daysSince(b.updated_at) - daysSince(a.updated_at)
+    case 'vinti': {
+      if (a.stage === 'vinto' && b.stage !== 'vinto') return -1
+      if (b.stage === 'vinto' && a.stage !== 'vinto') return 1
+      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    }
+    case 'persi': {
+      if (a.stage === 'perso' && b.stage !== 'perso') return -1
+      if (b.stage === 'perso' && a.stage !== 'perso') return 1
+      return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    }
+    case 'utente':
+      return (ownerNameById.get(a.owner_id ?? '') ?? '').localeCompare(ownerNameById.get(b.owner_id ?? '') ?? '')
+    case 'cliente':
+      return a.client_name.localeCompare(b.client_name)
     case 'recenti':
     default:
       return new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
@@ -131,6 +160,9 @@ export function Pipeline() {
   const [search, setSearch] = useState('')
   const [ownerFilter, setOwnerFilter] = useState('')
   const [sortBy, setSortBy] = useState<SortKey>('recenti')
+  // Finestra obbligatoria quando una trattativa entra in "Proposta Inviata"
+  // (0044_proposta_inviata.sql) — vedi updateStage/confirmProposal più sotto.
+  const [proposalModalDeal, setProposalModalDeal] = useState<Deal | null>(null)
 
   const canCreate = profile ? CAN_CREATE_DELETE.includes(profile.role) : false
   // Il tecnico vede solo le trattative con "Richiede validazione tecnica"
@@ -195,6 +227,16 @@ export function Pipeline() {
 
   async function updateStage(deal: Deal, stage: DealStage) {
     if (deal.stage === stage) return
+    // Entrare in "Proposta Inviata" richiede prima la finestra con i campi
+    // obbligatori (richiesta di Andrea, ott 2026) — da qualunque percorso
+    // arrivi (trascinamento, pulsante "avanza", passi dello StagePath):
+    // qui si apre solo la finestra, l'aggiornamento vero avviene in
+    // confirmProposal una volta compilata. Vale anche lato database, non
+    // solo qui (vedi enforce_proposal_fields() in 0044_proposta_inviata.sql).
+    if (stage === 'proposta') {
+      setProposalModalDeal(deal)
+      return
+    }
     setSavingId(deal.id)
     // Aggiornamento ottimista: la card si sposta subito, senza aspettare il
     // giro di rete. Se il salvataggio fallisce, ricarichiamo i dati veri.
@@ -203,6 +245,21 @@ export function Pipeline() {
     setSavingId(null)
     if (error) {
       alert('Non è stato possibile aggiornare la fase: ' + error.message)
+      loadDeals()
+    }
+  }
+
+  async function confirmProposal(
+    deal: Deal,
+    fields: { proposal_type: ProposalType; proposal_reference_code: string; proposal_value: number | null; proposal_quantity: number | null },
+  ) {
+    setSavingId(deal.id)
+    setDeals((current) => current.map((d) => (d.id === deal.id ? { ...d, stage: 'proposta', ...fields } : d)))
+    const { error } = await supabase.from('deals').update({ stage: 'proposta', ...fields }).eq('id', deal.id)
+    setSavingId(null)
+    setProposalModalDeal(null)
+    if (error) {
+      alert('Non è stato possibile salvare la proposta: ' + error.message)
       loadDeals()
     }
   }
@@ -222,6 +279,8 @@ export function Pipeline() {
   }
 
   const ownerMap = useMemo(() => new Map(profiles.map((p) => [p.id, p])), [profiles])
+  // Solo per l'ordinamento "Utente" (vedi compareDeals): nome per owner_id.
+  const ownerNameById = useMemo(() => new Map(profiles.map((p) => [p.id, p.full_name])), [profiles])
   const ownerOptions = useMemo(
     () =>
       profiles
@@ -319,8 +378,8 @@ export function Pipeline() {
 
           {filteredDeals.length > 0 && view === 'kanban' && (
             <div className="kanban-board">
-              {DEAL_STAGES.map((stage) => {
-                const rows = filteredDeals.filter((d) => d.stage === stage.id).sort((a, b) => compareDeals(a, b, sortBy))
+              {KANBAN_STAGES.map((stage) => {
+                const rows = filteredDeals.filter((d) => d.stage === stage.id).sort((a, b) => compareDeals(a, b, sortBy, ownerNameById))
                 const rottingCount = rows.filter(isRotting).length
                 return (
                   <div
@@ -393,21 +452,21 @@ export function Pipeline() {
           {filteredDeals.length > 0 && view === 'list' && (
             <div className="pipeline-list">
               <div className="pipeline-list-head">
-                <span className="pcol-client">Cliente / prodotto</span>
+                <button type="button" className="pcol-client" onClick={() => setSortBy('cliente')}>
+                  Cliente / prodotto
+                </button>
                 <span className="pcol-stage">Fase</span>
-                <button type="button" className="pcol-value" onClick={() => setSortBy('valore_desc')}>
-                  Valore
-                </button>
+                <span className="pcol-value">Valore</span>
                 <span className="pcol-weighted">Pesato</span>
-                <span className="pcol-owner">Utente</span>
-                <button type="button" className="pcol-action" onClick={() => setSortBy('azione')}>
-                  Prossima azione
+                <button type="button" className="pcol-owner" onClick={() => setSortBy('utente')}>
+                  Utente
                 </button>
+                <span className="pcol-action">Prossima azione</span>
                 <span className="pcol-expand" />
               </div>
               {filteredDeals
                 .slice()
-                .sort((a, b) => compareDeals(a, b, sortBy))
+                .sort((a, b) => compareDeals(a, b, sortBy, ownerNameById))
                 .map((deal) => {
                   const owner = deal.owner_id ? ownerMap.get(deal.owner_id) : undefined
                   const rotting = isRotting(deal)
@@ -457,6 +516,112 @@ export function Pipeline() {
           )}
         </>
       )}
+
+      {proposalModalDeal && (
+        <ProposalModal
+          deal={proposalModalDeal}
+          onCancel={() => setProposalModalDeal(null)}
+          onConfirm={(fields) => confirmProposal(proposalModalDeal, fields)}
+          saving={savingId === proposalModalDeal.id}
+        />
+      )}
+    </div>
+  )
+}
+
+// Finestra obbligatoria quando una trattativa entra in "Proposta Inviata"
+// (richiesta di Andrea, ott 2026, "pipeline clienti" punto 4) — vedi
+// updateStage/confirmProposal più sopra e enforce_proposal_fields() in
+// 0044_proposta_inviata.sql (lo stesso vincolo vale anche lato database).
+function ProposalModal({
+  deal,
+  onCancel,
+  onConfirm,
+  saving,
+}: {
+  deal: Deal
+  onCancel: () => void
+  onConfirm: (fields: { proposal_type: ProposalType; proposal_reference_code: string; proposal_value: number | null; proposal_quantity: number | null }) => void
+  saving: boolean
+}) {
+  const [proposalType, setProposalType] = useState<ProposalType | ''>('')
+  const [referenceCode, setReferenceCode] = useState('')
+  const [value, setValue] = useState('')
+  const [quantity, setQuantity] = useState('')
+
+  const needsValue = proposalType !== '' && PROPOSAL_TYPES_REQUIRING_VALUE.includes(proposalType)
+  const canSubmit =
+    proposalType !== '' && referenceCode.trim() !== '' && (!needsValue || (value.trim() !== '' && quantity.trim() !== ''))
+
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault()
+    if (!canSubmit || proposalType === '') return
+    onConfirm({
+      proposal_type: proposalType,
+      proposal_reference_code: referenceCode.trim(),
+      proposal_value: needsValue ? Number(value) : null,
+      proposal_quantity: needsValue ? Number(quantity) : null,
+    })
+  }
+
+  return (
+    <div className="modal-overlay" onClick={onCancel}>
+      <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="modal-head">
+          <h2>Proposta Inviata</h2>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel} aria-label="Chiudi">
+            ✕
+          </button>
+        </div>
+        <div className="modal-body">
+          <div className="modal-client-row">
+            <span className="muted">Trattativa</span>
+            <strong>{deal.client_name} — {deal.product}</strong>
+          </div>
+          <p className="muted">
+            Per far passare questa trattativa a "Proposta Inviata" servono questi dati, obbligatori.
+          </p>
+          <form className="new-deal-form" onSubmit={handleSubmit}>
+            <div className="field-row">
+              <label className="field-label">Tipo di proposta *</label>
+              <select value={proposalType} onChange={(e) => setProposalType(e.target.value as ProposalType)} required>
+                <option value="" disabled>
+                  Seleziona…
+                </option>
+                {PROPOSAL_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {PROPOSAL_TYPE_LABELS[t]}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className="field-row">
+              <label className="field-label">Codice riferimento *</label>
+              <input value={referenceCode} onChange={(e) => setReferenceCode(e.target.value)} required />
+            </div>
+            {needsValue && (
+              <div className="field-row-2">
+                <div className="field-row">
+                  <label className="field-label">Valore *</label>
+                  <input type="number" min="0" step="0.01" value={value} onChange={(e) => setValue(e.target.value)} required />
+                </div>
+                <div className="field-row">
+                  <label className="field-label">Quantità *</label>
+                  <input type="number" min="0" step="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} required />
+                </div>
+              </div>
+            )}
+            <div className="modal-actions">
+              <button type="submit" className="btn btn-primary" disabled={!canSubmit || saving}>
+                {saving ? 'Salvataggio…' : 'Conferma e invia proposta'}
+              </button>
+              <button type="button" className="btn btn-ghost" onClick={onCancel} disabled={saving}>
+                Annulla
+              </button>
+            </div>
+          </form>
+        </div>
+      </div>
     </div>
   )
 }

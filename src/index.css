@@ -479,6 +479,7 @@ a.tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border
 .pcol-expand { flex: 0 0 16px; text-align: right; color: var(--ink-3); font-size: 11px; }
 
 /* ---- report / grafici ---- */
+.tile-row-3 { grid-template-columns: repeat(3, 1fr); }
 .tile-row-4 { grid-template-columns: repeat(4, 1fr); }
 .tile-row-5 { grid-template-columns: repeat(5, 1fr); }
 .chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 20px; }
@@ -607,6 +608,14 @@ a.client-deal-row:hover { background: var(--surface-2); border-radius: 6px; }
 .comment-form { display: flex; gap: 8px; flex-wrap: wrap; }
 .comment-form input { flex: 1; min-width: 160px; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); }
 .comment-target-select { padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); font-size: 12.5px; max-width: 200px; }
+.comment-recipient { font-style: italic; }
+/* Commento vs Richiesta (0043_notifiche_commenti.sql) — stesso selettore del
+   destinatario per entrambe le modalità, qui solo la scelta "dove finisce". */
+.comment-mode-toggle { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.comment-mode-toggle button {
+  border: none; background: var(--surface); padding: 8px 10px; font-size: 12.5px; cursor: pointer; color: var(--ink-3);
+}
+.comment-mode-toggle button.active { background: var(--accent); color: #fff; font-weight: 600; }
 
 /* ---- chat aziendale ---- */
 .chat-view { display: flex; flex-direction: column; height: calc(100vh - 48px); }
@@ -767,7 +776,7 @@ a.client-deal-row:hover { background: var(--surface-2); border-radius: 6px; }
   .pipeline-summary { grid-template-columns: repeat(2, 1fr); }
   .pipeline-view-toggle { margin-left: 0; }
   .pcol-weighted, .pcol-action { display: none; }
-  .tile-row-4, .tile-row-5 { grid-template-columns: repeat(2, 1fr); }
+  .tile-row-3, .tile-row-4, .tile-row-5 { grid-template-columns: repeat(2, 1fr); }
   .chart-grid { grid-template-columns: 1fr; }
   .barlist-row { grid-template-columns: 80px 1fr auto; }
   .cal-row { flex-wrap: wrap; }
@@ -797,6 +806,20 @@ a.client-deal-row:hover { background: var(--surface-2); border-radius: 6px; }
 .sidebar-collapsed .nav-badge {
   top: 2px;
   right: 6px;
+}
+
+/* Pallino DEDICATO ai commenti con destinatario (0043_notifiche_commenti.sql,
+   richiesta di Andrea ott 2026) — colore diverso e in basso a destra invece
+   che in alto, apposta per restare distinto e non sovrapporsi al pallino
+   "Richieste"/"Chat" quando compaiono insieme sulla stessa voce di menu
+   (es. "Richieste", che ha sia badgeKey="richieste" sia commentTables). */
+.nav-badge-comments {
+  top: auto;
+  bottom: 4px;
+  background: #2a78d6;
+}
+.sidebar-collapsed .nav-badge-comments {
+  bottom: 2px;
 }
 
 /* Notifiche anche sui filtri di stato (Nuova/In lavorazione, in Richieste e

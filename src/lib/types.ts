@@ -36,6 +36,25 @@ export function hasFullAccess(role: UserRole | undefined): boolean {
   return role === 'dirigente' || role === 'amministrazione'
 }
 export type DealStage = 'lead' | 'qualificato' | 'proposta' | 'trattativa' | 'vinto' | 'perso'
+
+// Finestra obbligatoria quando una trattativa passa a "Proposta Inviata"
+// (0044_proposta_inviata.sql, richiesta di Andrea ott 2026). "Ordine" (così
+// come scritto da Andrea) corrisponde a "Proposta d'acquisto" — confermato:
+// Valore/Quantità sono obbligatori solo per queste due, non per le altre due.
+export type ProposalType = 'prima_offerta' | 'aggiornamento_prezzi' | 'fattura_proforma' | 'proposta_acquisto'
+
+export const PROPOSAL_TYPE_LABELS: Record<ProposalType, string> = {
+  prima_offerta: 'Prima offerta',
+  aggiornamento_prezzi: 'Aggiornamento prezzi',
+  fattura_proforma: 'Fattura Proforma',
+  proposta_acquisto: "Proposta d'acquisto",
+}
+
+export const PROPOSAL_TYPES: ProposalType[] = ['prima_offerta', 'aggiornamento_prezzi', 'fattura_proforma', 'proposta_acquisto']
+
+// Per questi due, Valore e Quantità diventano obbligatori (vincolo ripetuto
+// anche lato trigger, vedi enforce_proposal_fields() in 0044).
+export const PROPOSAL_TYPES_REQUIRING_VALUE: ProposalType[] = ['fattura_proforma', 'proposta_acquisto']
 export type RequestType = 'interna' | 'esterna'
 export type RequestDepartment = 'commerciale' | 'tecnico' | 'operativo' | 'amministrazione' | 'acquisti' | 'ricerca'
 export type RequestPriority = 'alta' | 'media' | 'bassa'
@@ -429,6 +448,14 @@ export interface Deal {
   note: string
   tags: string[]
   activity_details: DealActivityDetails
+  // Compilati nella finestra obbligatoria quando la trattativa passa a
+  // "Proposta Inviata" (0044_proposta_inviata.sql, richiesta di Andrea, ott
+  // 2026) — descrivono la proposta della trattativa nel suo complesso, non
+  // una singola interazione (a differenza di activity_details).
+  proposal_type: ProposalType | null
+  proposal_reference_code: string | null
+  proposal_value: number | null
+  proposal_quantity: number | null
   created_at: string
   updated_at: string
 }
@@ -703,6 +730,21 @@ export interface RecordComment {
   author_id: string | null
   body: string
   created_at: string
+  // Destinatario obbligatorio (0043_notifiche_commenti.sql, richiesta di
+  // Andrea ott 2026: i commenti "pubblici" senza destinatario non li leggeva
+  // nessuno) — esattamente uno dei due, mai entrambi, mai nessuno (vincolo
+  // anche lato database). null/null capita solo sui commenti storici
+  // scritti prima di questa modifica.
+  recipient_id: string | null
+  recipient_department: RequestDepartment | null
+}
+
+// Conteggio dei commenti non letti indirizzati a me, raggruppati per
+// ref_table — vedi unread_record_comments_by_table() in
+// 0043_notifiche_commenti.sql e il suo uso in AuthContext.tsx/Layout.tsx.
+export interface UnreadCommentsByTable {
+  ref_table: CommentRefTable
+  unread_count: number
 }
 
 // Canali della chat aziendale: "generale" (tutti) più un canale per ciascun

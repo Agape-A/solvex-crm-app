@@ -17,13 +17,20 @@ function timeAgo(iso: string): string {
   return new Date(iso).toLocaleDateString('it-IT')
 }
 
-// "pubblico" = commento normale (record_comments, visibile a tutti quelli che
-// vedono il record); "p:<id>" = richiesta a una persona precisa; "d:<reparto>"
-// = richiesta a un intero reparto. Stessa area "Commenti", niente più una
-// finestra separata: chi scrive sceglie il destinatario lì per lì e il
-// messaggio parte come commento o come richiesta collegata a questo stesso
-// record, senza dover ripetere la scelta del record (è già refTable/refId).
-type Target = 'pubblico' | `p:${string}` | `d:${string}`
+// "p:<id>" = destinatario una persona precisa; "d:<reparto>" = destinatario
+// un intero reparto. Non esiste più il "commento pubblico" senza
+// destinatario (richiesta di Andrea, ott 2026: "i commenti così come sono
+// adesso sono inutili, perché li legge solo chi li scrive") — ogni commento
+// ha sempre uno di questi due, qui scelto con lo stesso selettore sia per un
+// commento "normale" sia per una richiesta.
+type Recipient = `p:${string}` | `d:${string}`
+
+// "Commento" resta nella cronologia del record (record_comments, con
+// destinatario) e attiva il pallino dedicato ai commenti (vedi
+// AuthContext.tsx/Layout.tsx). "Richiesta" è il percorso che esisteva già
+// prima (tabella "requests") — non toccato, disponibile solo dove c'era
+// anche prima (REQUEST_REF_TABLES).
+type Mode = 'commento' | 'richiesta'
 
 export function CommentThread({
   refTable,
@@ -34,12 +41,13 @@ export function CommentThread({
   refId: string
   refLabel?: string
 }) {
-  const { profile } = useAuth()
+  const { profile, markCommentsSeen } = useAuth()
   const [comments, setComments] = useState<RecordComment[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [authors, setAuthors] = useState<Map<string, string>>(new Map())
   const [body, setBody] = useState('')
-  const [target, setTarget] = useState<Target>('pubblico')
+  const [mode, setMode] = useState<Mode>('commento')
+  const [recipient, setRecipient] = useState<Recipient | ''>('')
   const [loading, setLoading] = useState(true)
   const [sending, setSending] = useState(false)
   const [sentNotice, setSentNotice] = useState<string | null>(null)
@@ -73,31 +81,51 @@ export function CommentThread({
     return () => { cancelled = true; supabase.removeChannel(channel) }
   }, [refTable, refId])
 
+  // Aprire questa cronologia equivale a "averla vista": segna come letti i
+  // commenti indirizzati a me su questo record, così il pallino dedicato
+  // (Layout.tsx) si aggiorna — stesso istante in cui si segna vista una chat.
+  // "markCommentsSeen" resta fuori dalle dipendenze apposta (stessa scelta
+  // di "markChatSeen" in Chat.tsx): è una nuova funzione a ogni render di
+  // AuthProvider, includerla qui richiamerebbe questo effetto in loop.
+  useEffect(() => {
+    markCommentsSeen(refTable, refId)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refTable, refId])
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
-    if (!profile || !body.trim()) return
+    if (!profile || !body.trim() || !recipient) return
     setSending(true)
     setSentNotice(null)
 
-    if (target === 'pubblico') {
-      const { error } = await supabase.from('record_comments').insert({ ref_table: refTable, ref_id: refId, author_id: profile.id, body: body.trim() })
+    const isPersona = recipient.startsWith('p:')
+    const recipientId = isPersona ? recipient.slice(2) : null
+    const recipientDepartment = isPersona ? null : (recipient.slice(2) as RequestDepartment)
+    const recipientProfile = isPersona ? profiles.find((p) => p.id === recipientId) ?? null : null
+
+    if (mode === 'commento') {
+      const { error } = await supabase.from('record_comments').insert({
+        ref_table: refTable,
+        ref_id: refId,
+        author_id: profile.id,
+        body: body.trim(),
+        recipient_id: recipientId,
+        recipient_department: recipientDepartment,
+      })
       setSending(false)
-      if (error) { alert('Non è stato possibile pubblicare il commento: ' + error.message); return }
+      if (error) { alert('Non è stato possibile inviare il commento: ' + error.message); return }
       setBody('')
+      setRecipient('')
+      setSentNotice(isPersona && recipientProfile ? `Commento inviato a ${recipientProfile.full_name}.` : 'Commento inviato al reparto.')
       return
     }
 
-    const isPersona = target.startsWith('p:')
-    const recipientId = isPersona ? target.slice(2) : ''
-    const recipient = isPersona ? profiles.find((p) => p.id === recipientId) ?? null : null
-    const department: RequestDepartment = isPersona ? recipient?.department ?? 'amministrazione' : (target.slice(2) as RequestDepartment)
     const subject = refLabel ? `Richiesta su ${refLabel}` : 'Richiesta collegata'
-
     const { error } = await supabase.from('requests').insert({
       subject,
       sender: profile.full_name,
       type: 'interna',
-      department,
+      department: isPersona ? recipientProfile?.department ?? 'amministrazione' : recipientDepartment,
       priority: 'media',
       status: 'nuova',
       assignee_id: isPersona ? recipientId : null,
@@ -108,8 +136,18 @@ export function CommentThread({
     setSending(false)
     if (error) { alert('Non è stato possibile inviare la richiesta: ' + error.message); return }
     setBody('')
-    setSentNotice(isPersona && recipient ? `Richiesta inviata a ${recipient.full_name}.` : 'Richiesta inviata al reparto.')
-    setTarget('pubblico')
+    setRecipient('')
+    setMode('commento')
+    setSentNotice(isPersona && recipientProfile ? `Richiesta inviata a ${recipientProfile.full_name}.` : 'Richiesta inviata al reparto.')
+  }
+
+  // Etichetta del destinatario di un commento già inviato, per mostrarla
+  // nella cronologia — niente per i commenti storici "pubblici" (prima di
+  // 0043_notifiche_commenti.sql), che non hanno né l'uno né l'altro.
+  function recipientLabel(c: RecordComment): string | null {
+    if (c.recipient_id) return `→ ${authors.get(c.recipient_id) ?? 'utente'}`
+    if (c.recipient_department) return `→ reparto ${c.recipient_department}`
+    return null
   }
 
   return (
@@ -120,48 +158,70 @@ export function CommentThread({
       <div className="comment-list">
         {comments.map((c) => (
           <div className="comment-row" key={c.id}>
-            <div className="comment-head"><strong>{authors.get(c.author_id ?? '') ?? 'Utente'}</strong><span className="muted">{timeAgo(c.created_at)}</span></div>
+            <div className="comment-head">
+              <strong>{authors.get(c.author_id ?? '') ?? 'Utente'}</strong>
+              {recipientLabel(c) && <span className="muted comment-recipient">{recipientLabel(c)}</span>}
+              <span className="muted">{timeAgo(c.created_at)}</span>
+            </div>
             <p>{c.body}</p>
           </div>
         ))}
       </div>
       <form className="comment-form" onSubmit={handleSubmit}>
         {canRequest && (
-          <select
-            className="comment-target-select"
-            value={target}
-            onChange={(e) => setTarget(e.target.value as Target)}
-            aria-label="Destinatario"
-          >
-            <option value="pubblico">Commento pubblico</option>
-            <optgroup label="Manda come richiesta a…">
-              {profiles.map((p) => (
+          <div className="comment-mode-toggle">
+            <button type="button" className={mode === 'commento' ? 'active' : ''} onClick={() => setMode('commento')}>
+              Commento
+            </button>
+            <button type="button" className={mode === 'richiesta' ? 'active' : ''} onClick={() => setMode('richiesta')}>
+              Richiesta
+            </button>
+          </div>
+        )}
+        <select
+          className="comment-target-select"
+          value={recipient}
+          onChange={(e) => setRecipient(e.target.value as Recipient)}
+          aria-label="Destinatario"
+          required
+        >
+          <option value="" disabled>
+            Scegli il destinatario…
+          </option>
+          <optgroup label="Persona">
+            {profiles
+              .filter((p) => p.id !== profile?.id)
+              .map((p) => (
                 <option key={p.id} value={`p:${p.id}`}>
                   {p.full_name}
                 </option>
               ))}
-            </optgroup>
-            <optgroup label="…o a un reparto">
-              {REQUEST_DEPARTMENTS.map((d) => (
-                <option key={d} value={`d:${d}`}>
-                  {d}
-                </option>
-              ))}
-            </optgroup>
-          </select>
-        )}
+          </optgroup>
+          <optgroup label="Reparto">
+            {REQUEST_DEPARTMENTS.map((d) => (
+              <option key={d} value={`d:${d}`}>
+                {d}
+              </option>
+            ))}
+          </optgroup>
+        </select>
         <input
           value={body}
           onChange={(e) => setBody(e.target.value)}
-          placeholder={target === 'pubblico' ? 'Scrivi un commento per i colleghi…' : 'Scrivi il messaggio della richiesta…'}
+          placeholder={mode === 'commento' ? 'Scrivi il commento…' : 'Scrivi il messaggio della richiesta…'}
         />
-        <button className="btn btn-ghost" type="submit" disabled={sending || !body.trim()}>
-          {sending ? 'Invio…' : target === 'pubblico' ? 'Invia' : 'Invia richiesta'}
+        <button className="btn btn-ghost" type="submit" disabled={sending || !body.trim() || !recipient}>
+          {sending ? 'Invio…' : mode === 'commento' ? 'Invia commento' : 'Invia richiesta'}
         </button>
       </form>
       {sentNotice && (
         <p className="notice-success">
-          {sentNotice} La trovi anche nella pagina <Link to="/richieste">Richieste</Link>, insieme al collegamento a questa scheda.
+          {sentNotice}
+          {mode === 'richiesta' && (
+            <>
+              {' '}La trovi anche nella pagina <Link to="/richieste">Richieste</Link>, insieme al collegamento a questa scheda.
+            </>
+          )}
         </p>
       )}
     </div>

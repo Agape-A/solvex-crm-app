@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { CLIENT_TYPE_LABELS, hasFullAccess, type Client, type UserRole } from '../lib/types'
+import { CLIENT_TYPE_LABELS, hasFullAccess, type Client, type CommentRefTable, type UserRole } from '../lib/types'
 import {
   IconDashboard,
   IconPipeline,
@@ -41,25 +41,64 @@ import {
 // Dashboard e Chat restano visibili a chiunque sia autenticato.
 // "badgeKey" facoltativo: mostra il pallino rosso di notifica preso da
 // useAuth() (vedi AuthContext.tsx e 0029_notifiche_badge.sql).
-const NAV: { to: string; label: string; icon: typeof IconDashboard; roles?: UserRole[]; badgeKey?: 'chat' | 'richieste' }[] = [
+// "commentTables" facoltativo: pallino SEPARATO e dedicato ai commenti con
+// destinatario (0043_notifiche_commenti.sql, richiesta di Andrea ott 2026) —
+// somma unreadCommentsByTable per i ref_table dei <CommentThread> che
+// vivono in quella pagina (vedi i call-site in Pipeline/Requests/
+// PurchasePipeline/Suppliers/Clients/Calendar/Research.tsx). Resta distinto
+// dal pallino "Richieste"/"Chat" anche quando compare sulla stessa voce.
+const NAV: {
+  to: string
+  label: string
+  icon: typeof IconDashboard
+  roles?: UserRole[]
+  badgeKey?: 'chat' | 'richieste'
+  commentTables?: CommentRefTable[]
+}[] = [
   { to: '/', label: 'Dashboard', icon: IconDashboard },
-  { to: '/pipeline', label: 'Pipeline clienti', icon: IconPipeline, roles: ['operatore', 'tecnico', 'commerciale'] },
-  { to: '/clienti', label: 'Clienti', icon: IconClients, roles: ['operatore', 'tecnico', 'commerciale'] },
+  {
+    to: '/pipeline',
+    label: 'Pipeline clienti',
+    icon: IconPipeline,
+    roles: ['operatore', 'tecnico', 'commerciale'],
+    commentTables: ['deals'],
+  },
+  {
+    to: '/clienti',
+    label: 'Clienti',
+    icon: IconClients,
+    roles: ['operatore', 'tecnico', 'commerciale'],
+    commentTables: ['clients'],
+  },
   {
     to: '/richieste',
     label: 'Richieste',
     icon: IconRequests,
     badgeKey: 'richieste',
     roles: ['operatore', 'tecnico', 'commerciale', 'ufficio_acquisti'],
+    commentTables: ['requests'],
   },
-  { to: '/ricerche', label: 'Ricerca&Sviluppo', icon: IconResearch, roles: ['dottore_laboratorio'] },
-  { to: '/fornitori', label: 'Fornitori', icon: IconSuppliers, roles: ['ufficio_acquisti'] },
+  {
+    to: '/ricerche',
+    label: 'Ricerca&Sviluppo',
+    icon: IconResearch,
+    roles: ['dottore_laboratorio'],
+    commentTables: ['research_records'],
+  },
+  {
+    to: '/fornitori',
+    label: 'Fornitori',
+    icon: IconSuppliers,
+    roles: ['ufficio_acquisti'],
+    commentTables: ['suppliers'],
+  },
   { to: '/acquisti', label: 'Pipeline acquisti', icon: IconPipeline, roles: ['ufficio_acquisti'] },
   {
     to: '/calendario',
     label: 'Calendario',
     icon: IconCalendar,
     roles: ['operatore', 'tecnico', 'commerciale', 'dottore_laboratorio', 'ufficio_acquisti'],
+    commentTables: ['appointments'],
   },
   { to: '/marketing', label: 'Marketing', icon: IconMarketing, roles: ['operatore', 'tecnico', 'commerciale'] },
   {
@@ -83,7 +122,7 @@ function readStoredCollapsed(): boolean {
 }
 
 export function Layout({ children }: { children: ReactNode }) {
-  const { profile, signOut, unreadChatCount, newRequestsCount } = useAuth()
+  const { profile, signOut, unreadChatCount, newRequestsCount, unreadCommentsByTable } = useAuth()
   // Menu comprimibile: a icone soltanto, così le pagine (bacheca pipeline,
   // elenchi, calendario) guadagnano spazio orizzontale. La preferenza resta
   // salvata nel browser da una sessione all'altra.
@@ -101,6 +140,11 @@ export function Layout({ children }: { children: ReactNode }) {
   const badgeCounts: Record<'chat' | 'richieste', number> = {
     chat: unreadChatCount,
     richieste: newRequestsCount,
+  }
+
+  function commentBadgeCount(tables?: CommentRefTable[]): number {
+    if (!tables) return 0
+    return tables.reduce((sum, t) => sum + (unreadCommentsByTable[t] ?? 0), 0)
   }
 
   return (
@@ -127,6 +171,7 @@ export function Layout({ children }: { children: ReactNode }) {
           {NAV.filter((item) => !item.roles || item.roles.includes(profile?.role as UserRole) || hasFullAccess(profile?.role)).map((item) => {
             const Icon = item.icon
             const badgeCount = item.badgeKey ? badgeCounts[item.badgeKey] : 0
+            const commentCount = commentBadgeCount(item.commentTables)
             return (
               <NavLink
                 key={item.to}
@@ -138,6 +183,11 @@ export function Layout({ children }: { children: ReactNode }) {
                 <Icon className="nav-item-icon" />
                 <span className="nav-item-label">{item.label}</span>
                 {badgeCount > 0 && <span className="nav-badge">{badgeCount > 99 ? '99+' : badgeCount}</span>}
+                {commentCount > 0 && (
+                  <span className="nav-badge nav-badge-comments" title="Commenti non letti indirizzati a te">
+                    {commentCount > 99 ? '99+' : commentCount}
+                  </span>
+                )}
               </NavLink>
             )
           })}

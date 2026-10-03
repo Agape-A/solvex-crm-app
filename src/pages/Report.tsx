@@ -319,8 +319,14 @@ export function Report() {
 
   const pipelineAperta = deals.filter((d) => d.stage !== 'vinto' && d.stage !== 'perso')
   const vinti = deals.filter((d) => d.stage === 'vinto')
+  // "Chiuso Perso", simmetrico a "Chiuso Vinto" qui sotto — da ott 2026 le
+  // trattative perse non compaiono più nella Bacheca della pipeline (tolte
+  // dalle colonne, richiesta di Andrea: "più spazio alla grafica"), quindi
+  // qui nei Report è l'unico posto dove restano visibili in aggregato.
+  const persi = deals.filter((d) => d.stage === 'perso')
   const valorePipelineAperta = pipelineAperta.reduce((s, d) => s + Number(d.value_estimate), 0)
   const valoreVinto = vinti.reduce((s, d) => s + Number(d.value_estimate), 0)
+  const valorePerso = persi.reduce((s, d) => s + Number(d.value_estimate), 0)
 
   const valorePerFase: BarRow[] = DEAL_STAGES.map((s) => {
     const v = deals.filter((d) => d.stage === s.id).reduce((sum, d) => sum + Number(d.value_estimate), 0)
@@ -364,6 +370,16 @@ export function Report() {
   }
   const vintiPerMese: BarRow[] = months.map(({ key, label }) => {
     const v = vinti
+      .filter((d) => {
+        const u = new Date(d.updated_at)
+        return `${u.getFullYear()}-${u.getMonth()}` === key
+      })
+      .reduce((sum, d) => sum + Number(d.value_estimate), 0)
+    return { label, value: v, formatted: currency.format(v) }
+  })
+  // Stesso andamento, per le perse — pari visibilità a vinti/persi (confermato da Andrea).
+  const persiPerMese: BarRow[] = months.map(({ key, label }) => {
+    const v = persi
       .filter((d) => {
         const u = new Date(d.updated_at)
         return `${u.getFullYear()}-${u.getMonth()}` === key
@@ -578,7 +594,7 @@ export function Report() {
                 l'intestazione non deve più dire "Commerciale" per lui. */}
             <h2>{profile?.role === 'tecnico' ? 'Validazioni tecniche' : 'Commerciale'}</h2>
           </div>
-          <div className="tile-row">
+          <div className="tile-row tile-row-3">
             <div className="card tile">
               <div className="tile-label">Pipeline aperta</div>
               <div className="tile-value">{currency.format(valorePipelineAperta)}</div>
@@ -586,6 +602,10 @@ export function Report() {
             <div className="card tile">
               <div className="tile-label">Chiuso vinto</div>
               <div className="tile-value">{currency.format(valoreVinto)}</div>
+            </div>
+            <div className="card tile">
+              <div className="tile-label">Chiuso perso</div>
+              <div className="tile-value">{currency.format(valorePerso)}</div>
             </div>
           </div>
           <div className="chart-grid">
@@ -604,6 +624,10 @@ export function Report() {
             <div className="card panel">
               <div className="section-title">Chiuso vinto, ultimi 6 mesi</div>
               <BarList rows={vintiPerMese} tableCaption="Valore delle trattative chiuse vinte, per mese" />
+            </div>
+            <div className="card panel">
+              <div className="section-title">Chiuso perso, ultimi 6 mesi</div>
+              <BarList rows={persiPerMese} tableCaption="Valore delle trattative chiuse perse, per mese" />
             </div>
           </div>
         </>
