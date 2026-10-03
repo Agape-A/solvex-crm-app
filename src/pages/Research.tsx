@@ -29,6 +29,14 @@ export function Research() {
   const [loading, setLoading] = useState(true)
 
   const canAccess = profile ? CAN_ACCESS.includes(profile.role) : false
+  // Un laboratorista può assegnare una scheda solo a se stesso (la RLS lo
+  // impone: "owner_id = auth.uid() or owner_id is null" — vedi
+  // 0039_schede_ricerca_per_responsabile.sql); solo dirigente/
+  // amministrazione possono riassegnarla a un collega.
+  const isDirigente = profile?.role === 'dirigente' || profile?.role === 'amministrazione'
+  const ownerOptions = profiles
+    .filter((p) => p.role === 'dottore_laboratorio' || p.role === 'dirigente' || p.role === 'amministrazione')
+    .sort((a, b) => a.full_name.localeCompare(b.full_name))
 
   function clientFor(record: ResearchRecord) {
     return record.client_id ? clients.find((c) => c.id === record.client_id) ?? null : null
@@ -114,6 +122,8 @@ export function Research() {
         <NewResearchForm
           clients={clients}
           profiles={profiles}
+          owners={ownerOptions}
+          isDirigente={isDirigente}
           defaultOwnerId={profile.id}
           createdByName={profile.full_name}
           onCreated={() => {
@@ -149,7 +159,16 @@ export function Research() {
 
         <div className="card detail-panel">
           {!selected && <p className="muted">Seleziona una scheda dall'elenco.</p>}
-          {selected && <ResearchDetail record={selected} clients={clients} profiles={profiles} onChange={(patch) => updateRecord(selected, patch)} />}
+          {selected && (
+            <ResearchDetail
+              record={selected}
+              clients={clients}
+              profiles={profiles}
+              owners={ownerOptions}
+              isDirigente={isDirigente}
+              onChange={(patch) => updateRecord(selected, patch)}
+            />
+          )}
         </div>
       </div>
     </div>
@@ -160,11 +179,15 @@ function ResearchDetail({
   record,
   clients,
   profiles,
+  owners,
+  isDirigente,
   onChange,
 }: {
   record: ResearchRecord
   clients: Client[]
   profiles: Profile[]
+  owners: Profile[]
+  isDirigente: boolean
   onChange: (patch: Partial<ResearchRecord>) => void
 }) {
   const [objective, setObjective] = useState(record.objective)
@@ -223,14 +246,18 @@ function ResearchDetail({
 
       <div className="field-row">
         <label className="field-label">Responsabile</label>
-        <select value={record.owner_id ?? ''} onChange={(e) => onChange({ owner_id: e.target.value || null })}>
-          <option value="">— nessuno —</option>
-          {profiles.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.full_name}
-            </option>
-          ))}
-        </select>
+        {isDirigente ? (
+          <select value={record.owner_id ?? ''} onChange={(e) => onChange({ owner_id: e.target.value || null })}>
+            <option value="">— nessuno —</option>
+            {owners.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.full_name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span>{profiles.find((p) => p.id === record.owner_id)?.full_name ?? '— nessuno —'}</span>
+        )}
       </div>
 
       <div className="field-row">
@@ -292,12 +319,16 @@ function ResearchDetail({
 function NewResearchForm({
   clients,
   profiles,
+  owners,
+  isDirigente,
   defaultOwnerId,
   createdByName,
   onCreated,
 }: {
   clients: Client[]
   profiles: Profile[]
+  owners: Profile[]
+  isDirigente: boolean
   defaultOwnerId: string
   createdByName: string
   onCreated: () => void
@@ -385,14 +416,18 @@ function NewResearchForm({
       </div>
       <div className="field-row">
         <label className="field-label">Responsabile</label>
-        <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
-          <option value="">— nessuno —</option>
-          {profiles.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.full_name}
-            </option>
-          ))}
-        </select>
+        {isDirigente ? (
+          <select value={ownerId} onChange={(e) => setOwnerId(e.target.value)}>
+            <option value="">— nessuno —</option>
+            {owners.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.full_name}
+              </option>
+            ))}
+          </select>
+        ) : (
+          <span>{owners.find((p) => p.id === ownerId)?.full_name ?? '— Tu —'}</span>
+        )}
       </div>
       <div className="field-row">
         <label className="field-label">Obiettivo</label>
