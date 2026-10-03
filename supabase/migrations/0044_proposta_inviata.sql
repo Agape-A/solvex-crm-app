@@ -20,7 +20,17 @@
 -- in quella fase, altrimenti basterebbe cambiare una nota qualsiasi per
 -- ribloccarsi sullo stesso controllo).
 
-create type proposal_type as enum ('prima_offerta', 'aggiornamento_prezzi', 'fattura_proforma', 'proposta_acquisto');
+-- "create type" non ha una forma "if not exists" in Postgres: va protetta
+-- a mano, altrimenti rieseguire il file (anche solo perché un'esecuzione
+-- precedente si era fermata più sotto) dà errore "already exists" — stesso
+-- problema già risolto altrove con "if not exists (select ...)" (vedi la
+-- publication realtime in 0011_collaborazione.sql).
+do $$
+begin
+  if not exists (select 1 from pg_type where typname = 'proposal_type') then
+    create type proposal_type as enum ('prima_offerta', 'aggiornamento_prezzi', 'fattura_proforma', 'proposta_acquisto');
+  end if;
+end $$;
 
 alter table public.deals add column if not exists proposal_type proposal_type;
 alter table public.deals add column if not exists proposal_reference_code text;
