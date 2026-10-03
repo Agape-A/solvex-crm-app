@@ -461,6 +461,7 @@ function ClientDetail({
   const [sector, setSector] = useState(client.sector ?? '')
   const [country, setCountry] = useState(client.country)
   const [contactName, setContactName] = useState(client.contact_name ?? '')
+  const [contactRole, setContactRole] = useState(client.contact_role ?? '')
   const [contactEmail, setContactEmail] = useState(client.contact_email ?? '')
   const [contactPhone, setContactPhone] = useState(client.contact_phone ?? '')
   // Riga della cronologia aperta (al più una per volta) — richiesta di
@@ -472,6 +473,7 @@ function ClientDetail({
     setSector(client.sector ?? '')
     setCountry(client.country)
     setContactName(client.contact_name ?? '')
+    setContactRole(client.contact_role ?? '')
     setContactEmail(client.contact_email ?? '')
     setContactPhone(client.contact_phone ?? '')
     setExpandedTimelineId(null)
@@ -585,6 +587,22 @@ function ClientDetail({
           )}
         </div>
         <div className="field-row">
+          <label className="field-label">Mansione referente</label>
+          {canWrite ? (
+            <input
+              value={contactRole}
+              onChange={(e) => setContactRole(e.target.value)}
+              onBlur={() =>
+                contactRole !== (client.contact_role ?? '') && onChange({ contact_role: contactRole.trim() || null })
+              }
+            />
+          ) : (
+            <p className="muted">{client.contact_role || '—'}</p>
+          )}
+        </div>
+      </div>
+      <div className="field-row-2">
+        <div className="field-row">
           <label className="field-label">Email referente</label>
           {canWrite ? (
             <input
@@ -600,21 +618,21 @@ function ClientDetail({
             <p className="muted">{client.contact_email || '—'}</p>
           )}
         </div>
-      </div>
-      <div className="field-row">
-        <label className="field-label">Telefono referente</label>
-        {canWrite ? (
-          <input
-            value={contactPhone}
-            onChange={(e) => setContactPhone(e.target.value)}
-            onBlur={() =>
-              contactPhone !== (client.contact_phone ?? '') &&
-              onChange({ contact_phone: contactPhone.trim() || null })
-            }
-          />
-        ) : (
-          <p className="muted">{client.contact_phone || '—'}</p>
-        )}
+        <div className="field-row">
+          <label className="field-label">Telefono referente</label>
+          {canWrite ? (
+            <input
+              value={contactPhone}
+              onChange={(e) => setContactPhone(e.target.value)}
+              onBlur={() =>
+                contactPhone !== (client.contact_phone ?? '') &&
+                onChange({ contact_phone: contactPhone.trim() || null })
+              }
+            />
+          ) : (
+            <p className="muted">{client.contact_phone || '—'}</p>
+          )}
+        </div>
       </div>
 
       {client.external_id && <p className="muted">Codice cliente ERP: {client.external_id}</p>}
@@ -705,6 +723,7 @@ function NewClientForm({
   const [clientType, setClientType] = useState<ClientType>('conceria')
   const [country, setCountry] = useState('Italia')
   const [contactName, setContactName] = useState('')
+  const [contactRole, setContactRole] = useState('')
   const [contactEmail, setContactEmail] = useState('')
   const [contactPhone, setContactPhone] = useState('')
   const [techResponsibleId, setTechResponsibleId] = useState('')
@@ -719,6 +738,7 @@ function NewClientForm({
       client_type: clientType,
       country,
       contact_name: contactName || null,
+      contact_role: contactRole || null,
       contact_email: contactEmail || null,
       contact_phone: contactPhone || null,
       owner_id: profile.id,
@@ -781,13 +801,19 @@ function NewClientForm({
           <input value={contactName} onChange={(e) => setContactName(e.target.value)} placeholder="Nome e cognome" />
         </div>
         <div className="field-row">
+          <label className="field-label">Mansione referente (facoltativa)</label>
+          <input value={contactRole} onChange={(e) => setContactRole(e.target.value)} placeholder="es. Responsabile acquisti" />
+        </div>
+      </div>
+      <div className="field-row-2">
+        <div className="field-row">
           <label className="field-label">Email referente (facoltativa)</label>
           <input type="email" value={contactEmail} onChange={(e) => setContactEmail(e.target.value)} />
         </div>
-      </div>
-      <div className="field-row">
-        <label className="field-label">Telefono referente (facoltativo)</label>
-        <input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} />
+        <div className="field-row">
+          <label className="field-label">Telefono referente (facoltativo)</label>
+          <input value={contactPhone} onChange={(e) => setContactPhone(e.target.value)} />
+        </div>
       </div>
       <button className="btn btn-primary" type="submit" disabled={saving}>
         {saving ? 'Creazione…' : 'Crea cliente'}
@@ -812,6 +838,7 @@ type TargetField =
   | 'country'
   | 'externalId'
   | 'contactName'
+  | 'contactRole'
   | 'contactEmail'
   | 'contactPhone'
 
@@ -824,6 +851,7 @@ const EMPTY_MAP: ColumnMap = {
   country: '',
   externalId: '',
   contactName: '',
+  contactRole: '',
   contactEmail: '',
   contactPhone: '',
 }
@@ -835,6 +863,7 @@ const FIELD_LABELS: Record<TargetField, string> = {
   country: 'Paese',
   externalId: 'Codice cliente ERP (per aggiornamenti futuri)',
   contactName: 'Referente',
+  contactRole: 'Mansione referente',
   contactEmail: 'Email referente',
   contactPhone: 'Telefono referente',
 }
@@ -846,6 +875,7 @@ interface ImportedRow {
   country: string
   external_id: string | null
   contact_name: string | null
+  contact_role: string | null
   contact_email: string | null
   contact_phone: string | null
   owner_id: string | null
@@ -926,7 +956,16 @@ function ImportClientsPanel({ profile, onImported }: { profile: Profile; onImpor
           if (!auto.clientType && /(tipo|categoria|type)/.test(low)) auto.clientType = h
           if (!auto.country && /(paese|country|nazione)/.test(low)) auto.country = h
           if (!auto.externalId && /(codice|cod\.?\s*cliente|id erp|customer id)/.test(low)) auto.externalId = h
-          if (!auto.contactName && /(referente|contatto|contact)/.test(low)) auto.contactName = h
+          // "Mansione referente" va riconosciuta PRIMA di "Referente" (qui
+          // sotto): contiene comunque la parola "referente", quindi se
+          // controllata dopo finirebbe assegnata (anche) al nome del
+          // referente invece che alla sua mansione.
+          if (!auto.contactRole && /(mansione|ruolo referente|qualifica|job title|position)/.test(low)) {
+            auto.contactRole = h
+          }
+          if (!auto.contactName && /(referente|contatto|contact)/.test(low) && !/(mansione|ruolo|qualifica)/.test(low)) {
+            auto.contactName = h
+          }
           if (!auto.contactEmail && /(email|e-mail|mail)/.test(low)) auto.contactEmail = h
           if (!auto.contactPhone && /(telefono|tel\.?|phone|cellulare)/.test(low)) auto.contactPhone = h
         }
@@ -955,6 +994,7 @@ function ImportClientsPanel({ profile, onImported }: { profile: Profile; onImpor
       country: map.country ? cellToText(row[map.country]) || defaultCountry : defaultCountry,
       external_id: map.externalId ? cellToText(row[map.externalId]) || null : null,
       contact_name: map.contactName ? cellToText(row[map.contactName]) || null : null,
+      contact_role: map.contactRole ? cellToText(row[map.contactRole]) || null : null,
       contact_email: map.contactEmail ? cellToText(row[map.contactEmail]) || null : null,
       contact_phone: map.contactPhone ? cellToText(row[map.contactPhone]) || null : null,
       owner_id: importOwnerId,

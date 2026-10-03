@@ -81,6 +81,14 @@ export interface Client {
   country: string
   external_id: string | null
   contact_name: string | null
+  // Mansione del referente cliente (colonna aggiunta in
+  // 0042_mansione_referente.sql, richiesta di Andrea, ott 2026) — es.
+  // "Responsabile acquisti", "Direttore tecnico": un campo di testo libero
+  // sulla scheda cliente, non legato a nessun ruolo del CRM. Non va confuso
+  // con "mansione_referente" dentro deals.activity_details (quella è per
+  // singola interazione/attività — vedi DealActivity* più sotto — questa è
+  // invece permanente sulla scheda cliente, come "contact_name").
+  contact_role: string | null
   contact_email: string | null
   contact_phone: string | null
   is_customer: boolean
