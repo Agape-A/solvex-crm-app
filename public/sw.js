@@ -20,3 +20,48 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', () => {
   // Nessun intercept: nessuna risposta dalla cache, nessun event.respondWith.
 })
+
+// ============ Notifiche push (richiesta di Andrea, ott 2026) ============
+// Qui sì che il service worker fa qualcosa: riceve l'evento "push" dal
+// sistema operativo (anche ad app chiusa) e mostra la notifica di sistema,
+// stile WhatsApp. Il contenuto arriva dalla Edge Function "push-send" (vedi
+// supabase/migrations/0045_notifiche_push.sql e README).
+
+self.addEventListener('push', (event) => {
+  let data = {}
+  try {
+    data = event.data ? event.data.json() : {}
+  } catch {
+    data = { title: 'Solvex CRM', body: event.data ? event.data.text() : '' }
+  }
+
+  const title = data.title || 'Solvex CRM'
+  const options = {
+    body: data.body || '',
+    icon: '/icon-192.png',
+    badge: '/icon-192.png',
+    data: { url: data.url || '/' },
+  }
+
+  event.waitUntil(self.registration.showNotification(title, options))
+})
+
+// Toccando la notifica si apre (o si porta avanti) l'app, sulla pagina
+// giusta per quell'evento (es. /chat per un messaggio, /richieste per una
+// nuova richiesta).
+self.addEventListener('notificationclick', (event) => {
+  event.notification.close()
+  const targetUrl = (event.notification.data && event.notification.data.url) || '/'
+
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientsArr) => {
+      for (const client of clientsArr) {
+        if ('focus' in client) {
+          if ('navigate' in client) client.navigate(targetUrl)
+          return client.focus()
+        }
+      }
+      if (self.clients.openWindow) return self.clients.openWindow(targetUrl)
+    })
+  )
+})

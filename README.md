@@ -65,6 +65,70 @@ modifica il campo `role` della riga corrispondente. In una fase successiva
 vale la pena costruire una piccola schermata "Utenti" riservata ai dirigenti
 per farlo dall'app, invece che dal pannello Supabase.
 
+## 6. Notifiche push (opzionale)
+
+Con l'app installata (schermata Home su iPhone, Dock su Mac) può anche
+mandare notifiche push vere e proprie — banner, suono, badge, anche a
+schermo bloccato, come WhatsApp — per: scadenze dei lead dal Calendario,
+chat, richieste ricevute, commenti ricevuti. Finché non completi questi
+passaggi l'app funziona comunque normalmente, semplicemente non manda
+notifiche (vedi il commento nella migrazione 0045).
+
+**1) Esegui la migrazione** — SQL Editor, incolla ed esegui
+`supabase/migrations/0045_notifiche_push.sql`. Se dà errore sulle righe
+`create extension`, vai su **Database → Extensions**, abilita `pg_net` e
+`pg_cron` da lì, poi rilancia il file.
+
+**2) Crea la Edge Function** — **Edge Functions → Create a new function**,
+chiamala `push-send`, incolla dentro tutto il contenuto di
+`supabase/functions/push-send/index.ts` e salva/esegui il deploy (nessuna
+riga di comando: si fa tutto dal pannello, come per le migrazioni).
+
+**3) Imposta i segreti della funzione** — **Edge Functions → push-send →
+Secrets** (o le impostazioni dei segreti del progetto, a seconda della
+versione del pannello), aggiungi:
+
+- `VAPID_PUBLIC_KEY` e `VAPID_PRIVATE_KEY` — la coppia di chiavi già
+  generata per te (te le ho mandate in chat, non sono scritte qui perché
+  sono segrete: la privata in particolare non deve mai finire su GitHub).
+- `VAPID_SUBJECT` — `mailto:` seguito da una tua email di contatto, es.
+  `mailto:info@solvex.it`.
+- `PUSH_DISPATCH_SECRET` — anche questo te l'ho mandato in chat: è la
+  "password" che solo il database e la funzione si scambiano, per
+  impedire a chiunque altro di far comparire notifiche a caso.
+
+`SUPABASE_URL` e `SUPABASE_SERVICE_ROLE_KEY` li imposta già Supabase da
+solo per ogni Edge Function: non serve aggiungerli.
+
+**4) Collega la funzione al database** — SQL Editor, esegui (sostituendo
+`<project-ref>` con quello del tuo progetto, visibile nell'URL del pannello
+o in Project Settings → API, e `<stesso-valore-di-PUSH_DISPATCH_SECRET>`
+con il segreto del punto 3):
+
+```sql
+update public.app_config set value = 'https://<project-ref>.supabase.co/functions/v1/push-send'
+  where key = 'push_edge_function_url';
+update public.app_config set value = '<stesso-valore-di-PUSH_DISPATCH_SECRET>'
+  where key = 'push_dispatch_secret';
+```
+
+**5) Aggiungi la chiave pubblica al frontend** — è già nel tuo `.env`
+locale (`VITE_VAPID_PUBLIC_KEY`, non è segreta: viaggia comunque fino al
+browser). Aggiungi la stessa riga anche su **Vercel → Project Settings →
+Environment Variables** con lo stesso valore, poi fai un redeploy (anche
+solo "Redeploy" sull'ultimo deployment, senza bisogno di un nuovo push).
+
+**6) Prova** — apri l'app installata, menu laterale → **"Attiva
+notifiche"** (sopra "Esci"), accetta il permesso del browser. Da un altro
+utente scrivi un commento/messaggio/richiesta indirizzato a te: la
+notifica dovrebbe comparire entro pochi secondi. Le scadenze dei lead si
+controllano una volta al giorno (06:30 UTC, modificabile rilanciando le
+ultime due righe della migrazione 0045 con un altro orario).
+
+Limite di iOS: le notifiche push funzionano solo se l'app è stata aggiunta
+alla schermata Home (non nella scheda di Safari) e con iOS 16.4 o
+successivo.
+
 ## Cosa manca ancora (prossimi passi)
 
 - **Integrazione email (Fase 2)**: la colonna `source_email_id` sulla tabella

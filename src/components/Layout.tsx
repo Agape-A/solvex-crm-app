@@ -3,6 +3,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { CLIENT_TYPE_LABELS, hasFullAccess, type Client, type CommentRefTable, type UserRole } from '../lib/types'
+import { disablePush, enablePush, getPushStatus, pushSupported, type PushStatus } from '../lib/push'
 import {
   IconDashboard,
   IconPipeline,
@@ -21,6 +22,7 @@ import {
   IconUsers,
   IconMenu,
   IconX,
+  IconBell,
 } from './Icons'
 
 // "roles" facoltativo: se presente, la voce compare solo a chi ha uno di
@@ -237,6 +239,7 @@ export function Layout({ children }: { children: ReactNode }) {
               <div className="whoami-role">{profile?.role}</div>
             </div>
           </div>
+          <PushButton collapsed={collapsed} />
           <button className="btn btn-ghost" onClick={() => signOut()} title={collapsed ? 'Esci' : undefined}>
             <IconLogout />
             <span className="btn-label">Esci</span>
@@ -245,6 +248,61 @@ export function Layout({ children }: { children: ReactNode }) {
       </aside>
       <main className={'main' + (collapsed ? ' main-expanded' : '')}>{children}</main>
     </div>
+  )
+}
+
+// ============ Notifiche push (richiesta di Andrea, ott 2026) ============
+// "è possibile ora far inviare notifiche come app e far apparire una
+// notifica stile whatsapp": pulsante che chiede il permesso e iscrive questo
+// dispositivo (src/lib/push.ts + supabase/migrations/0045_notifiche_push.sql).
+// Non invisibile su chi non lo supporta (es. browser desktop senza HTTPS in
+// sviluppo): pushSupported() nasconde il pulsante invece di mostrare un
+// errore che l'utente non saprebbe risolvere.
+
+function PushButton({ collapsed }: { collapsed: boolean }) {
+  const [status, setStatus] = useState<PushStatus>('inactive')
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!pushSupported()) {
+      setStatus('unsupported')
+      return
+    }
+    getPushStatus().then(setStatus)
+  }, [])
+
+  if (status === 'unsupported') return null
+
+  async function toggle() {
+    setBusy(true)
+    setError(null)
+    if (status === 'active') {
+      await disablePush()
+      setStatus('inactive')
+    } else {
+      const res = await enablePush()
+      if (!res.ok) setError(res.error ?? "Non è stato possibile attivare le notifiche.")
+      setStatus(await getPushStatus())
+    }
+    setBusy(false)
+  }
+
+  const label =
+    status === 'active' ? 'Notifiche attive' : status === 'denied' ? 'Notifiche bloccate' : 'Attiva notifiche'
+  const title = collapsed ? label : error ?? (status === 'denied' ? 'Permesso negato nel browser' : undefined)
+
+  return (
+    <button
+      type="button"
+      className={'btn btn-ghost' + (status === 'active' ? ' push-btn-active' : '')}
+      onClick={toggle}
+      disabled={busy || status === 'denied'}
+      title={title}
+    >
+      <IconBell />
+      <span className="btn-label">{label}</span>
+    </button>
   )
 }
 
