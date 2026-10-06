@@ -166,6 +166,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
   width: 350px; display: flex; flex-direction: column; gap: 10px; padding: 30px;
   background: var(--surface); border: 1px solid var(--border); border-radius: 16px; box-shadow: var(--shadow-md);
 }
+.login-card-code { margin-top: 14px; }
 .login-card input {
   padding: 9px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg);
   transition: border-color .12s ease;

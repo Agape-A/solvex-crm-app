@@ -8,6 +8,14 @@ interface AuthState {
   profile: Profile | null
   loading: boolean
   signInWithOtp: (email: string) => Promise<{ error: string | null }>
+  // Verifica del codice a 6 cifre (richiesta di Andrea ott 2026: nell'app
+  // installata su iPhone/Mac il link di accesso ricevuto via email si apre
+  // sempre nel browser normale, mai dentro l'app installata, perché hanno
+  // una loro memoria separata. Il codice, letto dall'email e digitato a
+  // mano nella stessa finestra dell'app installata, evita del tutto il
+  // problema. Nessuna modifica al database: usa l'OTP di Supabase Auth
+  // già generato da signInWithOtp.
+  verifyOtpCode: (email: string, code: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
   unreadChatCount: number
   newRequestsCount: number
@@ -209,6 +217,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { error: error?.message ?? null }
   }
 
+  async function verifyOtpCode(email: string, code: string) {
+    const { error } = await supabase.auth.verifyOtp({
+      email,
+      token: code.trim(),
+      type: 'email',
+    })
+    return { error: error?.message ?? null }
+  }
+
   async function signOut() {
     await supabase.auth.signOut()
   }
@@ -220,6 +237,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         profile,
         loading,
         signInWithOtp,
+        verifyOtpCode,
         signOut,
         unreadChatCount,
         newRequestsCount,
