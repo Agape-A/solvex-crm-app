@@ -147,6 +147,14 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .sidebar-collapsed .sidebar-footer .btn { justify-content: center; padding: 9px; }
 .sidebar-collapsed .btn-label { display: none; }
 
+/* ---- menu su telefono (richiesta di Andrea ott 2026) ----
+   Sopra gli 860px questi elementi restano nascosti: il menu laterale è
+   sempre visibile come sempre. Sotto gli 860px (vedi il media query più in
+   basso) il menu diventa un pannello che si apre da un bottone in alto. */
+.mobile-topbar { display: none; }
+.mobile-nav-backdrop { display: none; }
+.mobile-nav-close { display: none; }
+
 .main { flex: 1; min-width: 0; }
 /* Il tetto è volutamente molto alto: su qualunque schermo reale le pagine con
    elenchi/tabelle (Richieste, Clienti, Marketing, Report...) occupano così
@@ -779,7 +787,64 @@ a.client-deal-row:hover { background: var(--surface-2); border-radius: 6px; }
 @media (max-width: 860px) {
   .cal-layout { grid-template-columns: 1fr; }
   .cal-side { position: static; }
-  .sidebar { display: none; }
+
+  /* ---- menu su telefono (richiesta di Andrea ott 2026) ----
+     Prima il menu laterale spariva del tutto sotto gli 860px, senza nessuna
+     alternativa per raggiungere le pagine: su un iPhone vero (sempre sotto
+     questa soglia) l'intero menu era irraggiungibile. Ora diventa un
+     pannello che scorre da sinistra, aperto dal bottone in alto. */
+  .mobile-topbar {
+    display: flex; align-items: center; gap: 12px;
+    position: fixed; top: 0; left: 0; right: 0; height: 54px; z-index: 150;
+    padding: 0 14px; background: var(--surface); border-bottom: 1px solid var(--border);
+  }
+  .mobile-topbar-btn {
+    display: flex; align-items: center; justify-content: center;
+    width: 34px; height: 34px; border: 1px solid var(--border); border-radius: 9px;
+    background: var(--surface); color: var(--ink); cursor: pointer; flex: none; padding: 0;
+  }
+  .mobile-topbar-btn svg { width: 18px; height: 18px; }
+  .mobile-topbar .brand { font-size: 16px; }
+
+  .mobile-nav-backdrop {
+    display: block; position: fixed; inset: 0; z-index: 190;
+    background: rgba(22, 33, 31, 0.45);
+  }
+
+  .shell { padding-top: 54px; }
+  .main { padding-top: 0; }
+
+  .sidebar {
+    position: fixed; top: 0; bottom: 0; left: 0; z-index: 200;
+    width: 260px; max-width: 80vw;
+    transform: translateX(-100%);
+    transition: transform .2s ease;
+    box-shadow: none;
+    overflow-y: auto;
+  }
+  .sidebar.sidebar-mobile-open { transform: translateX(0); box-shadow: 10px 0 30px rgba(0, 0, 0, 0.22); }
+
+  /* Dentro il pannello mobile ignoriamo del tutto la modalità "compressa a
+     icone" pensata per il desktop: qui c'è spazio, meglio mostrare sempre
+     le etichette per intero. */
+  .sidebar-collapsed { width: 260px; max-width: 80vw; }
+  .sidebar-collapsed .sidebar-head { flex-direction: row; }
+  .sidebar-collapsed .brand-text { display: inline; }
+  .sidebar-collapsed .nav-item { justify-content: flex-start; padding: 9px 10px; }
+  .sidebar-collapsed .nav-item-label { display: inline; }
+  .sidebar-collapsed .whoami { justify-content: flex-start; padding: 0 4px; }
+  .sidebar-collapsed .whoami-text { display: block; }
+  .sidebar-collapsed .sidebar-footer .btn { justify-content: flex-start; padding: 8px 10px; }
+  .sidebar-collapsed .btn-label { display: inline; }
+  .sidebar-collapse-btn { display: none; }
+
+  .mobile-nav-close {
+    display: flex; align-items: center; justify-content: center;
+    position: absolute; top: 14px; right: 14px; width: 30px; height: 30px;
+    border: none; background: none; color: var(--ink-3); cursor: pointer; padding: 0;
+  }
+  .mobile-nav-close svg { width: 17px; height: 17px; }
+
   .tile-row, .req-layout { grid-template-columns: 1fr; }
   .kanban-board { grid-template-columns: 1fr; }
   .pipeline-summary { grid-template-columns: repeat(2, 1fr); }

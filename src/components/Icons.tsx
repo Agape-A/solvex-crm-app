@@ -132,6 +132,28 @@ export function IconChevronsLeft(props: IconProps) {
   )
 }
 
+// Menu a tre righe ("hamburger") e X, per la barra in alto su schermi da
+// telefono (richiesta di Andrea ott 2026: su iPhone il menu laterale non si
+// vedeva affatto — era nascosto senza alternativa sotto gli 860px).
+export function IconMenu(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M4 6.5h16" />
+      <path d="M4 12h16" />
+      <path d="M4 17.5h16" />
+    </svg>
+  )
+}
+
+export function IconX(props: IconProps) {
+  return (
+    <svg {...base} {...props}>
+      <path d="M5.5 5.5 18.5 18.5" />
+      <path d="M18.5 5.5 5.5 18.5" />
+    </svg>
+  )
+}
+
 export function IconDevelopment(props: IconProps) {
   return (
     <svg {...base} {...props}>

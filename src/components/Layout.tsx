@@ -19,6 +19,8 @@ import {
   IconResearch,
   IconSuppliers,
   IconUsers,
+  IconMenu,
+  IconX,
 } from './Icons'
 
 // "roles" facoltativo: se presente, la voce compare solo a chi ha uno di
@@ -127,6 +129,11 @@ export function Layout({ children }: { children: ReactNode }) {
   // elenchi, calendario) guadagnano spazio orizzontale. La preferenza resta
   // salvata nel browser da una sessione all'altra.
   const [collapsed, setCollapsed] = useState(readStoredCollapsed)
+  // Menu laterale su telefono (richiesta di Andrea ott 2026): sotto gli 860px
+  // il menu non resta più fisso a lato (non c'è spazio), diventa un pannello
+  // che si apre da un bottone in alto e si chiude da solo dopo aver scelto
+  // una voce, oppure toccando fuori dal pannello.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false)
 
   useEffect(() => {
     try {
@@ -149,7 +156,36 @@ export function Layout({ children }: { children: ReactNode }) {
 
   return (
     <div className="shell">
-      <aside className={'sidebar' + (collapsed ? ' sidebar-collapsed' : '')}>
+      <header className="mobile-topbar">
+        <button
+          type="button"
+          className="mobile-topbar-btn"
+          onClick={() => setMobileNavOpen(true)}
+          title="Apri il menu"
+        >
+          <IconMenu />
+        </button>
+        <div className="brand">
+          <span className="brand-mark">
+            <IconFlask />
+          </span>
+          <span className="brand-text">Solvex</span>
+        </div>
+      </header>
+      {mobileNavOpen && <div className="mobile-nav-backdrop" onClick={() => setMobileNavOpen(false)} />}
+      <aside
+        className={
+          'sidebar' + (collapsed ? ' sidebar-collapsed' : '') + (mobileNavOpen ? ' sidebar-mobile-open' : '')
+        }
+      >
+        <button
+          type="button"
+          className="mobile-nav-close"
+          onClick={() => setMobileNavOpen(false)}
+          title="Chiudi il menu"
+        >
+          <IconX />
+        </button>
         <div className="sidebar-head">
           <div className="brand">
             <span className="brand-mark">
@@ -179,6 +215,7 @@ export function Layout({ children }: { children: ReactNode }) {
                 end={item.to === '/'}
                 title={collapsed ? item.label : undefined}
                 className={({ isActive }) => 'nav-item' + (isActive ? ' active' : '')}
+                onClick={() => setMobileNavOpen(false)}
               >
                 <Icon className="nav-item-icon" />
                 <span className="nav-item-label">{item.label}</span>
