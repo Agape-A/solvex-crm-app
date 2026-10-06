@@ -160,6 +160,13 @@ export function Pipeline() {
   const [search, setSearch] = useState('')
   const [ownerFilter, setOwnerFilter] = useState('')
   const [sortBy, setSortBy] = useState<SortKey>('recenti')
+  // Selettore di fase (richiesta di Andrea ott 2026): su telefono le tre
+  // colonne della bacheca (Nuovo Contatto, Sviluppo Contatto, Proposta
+  // inviata) impilate una sotto l'altra rendevano scomodi sia la vista che
+  // la ricerca — serve poter scegliere una sola fase alla volta, con il
+  // selettore sempre a portata insieme alla barra di ricerca e ai filtri.
+  // "all" = mostra tutte le fasi (comportamento di sempre, anche su desktop).
+  const [stageFilter, setStageFilter] = useState<DealStage | 'all'>('all')
   // Finestra obbligatoria quando una trattativa entra in "Proposta Inviata"
   // (0044_proposta_inviata.sql) — vedi updateStage/confirmProposal più sotto.
   const [proposalModalDeal, setProposalModalDeal] = useState<Deal | null>(null)
@@ -294,9 +301,10 @@ export function Pipeline() {
     return deals.filter((d) => {
       if (q && !(d.client_name.toLowerCase().includes(q) || d.product.toLowerCase().includes(q))) return false
       if (ownerFilter && d.owner_id !== ownerFilter) return false
+      if (stageFilter !== 'all' && d.stage !== stageFilter) return false
       return true
     })
-  }, [deals, search, ownerFilter])
+  }, [deals, search, ownerFilter, stageFilter])
 
   if (!profile) return null
 
@@ -340,6 +348,12 @@ export function Pipeline() {
 
       {!loading && (
         <>
+          {/* Barra di ricerca, filtri e selettore di fase uniti in un unico
+              blocco (richiesta di Andrea ott 2026): su telefono restano
+              fissi in alto mentre si scorrono le trattative, invece di
+              sparire subito scorrendo verso il basso — vedi
+              .pipeline-filters-sticky nel media query sotto gli 860px. */}
+          <div className="pipeline-filters-sticky">
           <div className="pipeline-toolbar">
             <input
               className="pipeline-search-input"
@@ -372,13 +386,30 @@ export function Pipeline() {
             </div>
           </div>
 
+          <div className="pipeline-stage-filter">
+            <button type="button" className={stageFilter === 'all' ? 'active' : ''} onClick={() => setStageFilter('all')}>
+              Tutte le fasi
+            </button>
+            {KANBAN_STAGES.map((stage) => (
+              <button
+                key={stage.id}
+                type="button"
+                className={stageFilter === stage.id ? 'active' : ''}
+                onClick={() => setStageFilter(stage.id)}
+              >
+                {stage.label}
+              </button>
+            ))}
+          </div>
+          </div>
+
           {filteredDeals.length === 0 && (
             <p className="muted">Nessuna trattativa corrisponde ai filtri selezionati.</p>
           )}
 
           {filteredDeals.length > 0 && view === 'kanban' && (
-            <div className="kanban-board">
-              {KANBAN_STAGES.map((stage) => {
+            <div className={'kanban-board' + (stageFilter !== 'all' ? ' kanban-board-single' : '')}>
+              {KANBAN_STAGES.filter((stage) => stageFilter === 'all' || stage.id === stageFilter).map((stage) => {
                 const rows = filteredDeals.filter((d) => d.stage === stage.id).sort((a, b) => compareDeals(a, b, sortBy, ownerNameById))
                 const rottingCount = rows.filter(isRotting).length
                 return (

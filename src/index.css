@@ -406,6 +406,21 @@ a.tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border
 .pipeline-view-toggle button + button { border-left: 1px solid var(--border); }
 .pipeline-view-toggle button.active { background: var(--accent); color: #fff; }
 
+/* Selettore di fase (richiesta di Andrea ott 2026): filtro aggiuntivo per
+   mostrare una sola fase alla volta, utile soprattutto su telefono dove le
+   tre colonne impilate rendevano scomodi sia la vista che la ricerca. */
+.pipeline-stage-filter {
+  display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 16px;
+}
+.pipeline-stage-filter button {
+  padding: 7px 14px; border: 1px solid var(--border); border-radius: 20px;
+  background: var(--surface); font-size: 12.5px; font-weight: 700; color: var(--ink-2); cursor: pointer;
+}
+.pipeline-stage-filter button.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+/* Con una sola fase selezionata la bacheca mostra una colonna soltanto: non
+   deve restare stretta a 300px come se ce ne fossero altre tre accanto. */
+.kanban-board-single { grid-template-columns: 1fr; max-width: 520px; }
+
 /* Path — lo stepper di fase ispirato al componente "Path" delle Opportunity
    di Salesforce: mostra il percorso della trattativa e permette di saltare
    direttamente a una fase con un click.
@@ -874,16 +889,17 @@ a.client-deal-row:hover { background: var(--surface-2); border-radius: 6px; }
      2026): resta solo la Bacheca, quindi il selettore non serve più. */
   .pipeline-view-toggle { display: none; }
 
-  /* Intestazione di colonna (Nuovo Contatto / Sviluppo Contatto / Proposta
-     inviata) sempre visibile mentre si scorrono le trattative di quella
-     colonna, invece di sparire subito scorrendo verso il basso. */
-  .kanban-col-head {
-    position: sticky; top: 54px; z-index: 5;
-    background: var(--surface-2);
-    margin: -16px -16px 0;
-    padding: 14px 16px 10px;
-    border-radius: 12px 12px 0 0;
+  /* Barra di ricerca + filtri + selettore di fase: fissi in alto (sotto la
+     barra del menu) mentre si scorrono le trattative, invece di sparire
+     scorrendo verso il basso (richiesta di Andrea ott 2026). */
+  .pipeline-filters-sticky {
+    position: sticky; top: 54px; z-index: 8;
+    background: var(--bg); padding: 10px 0 6px; margin: -10px 0 0;
   }
+
+  /* L'intestazione di colonna non serve più fissa in alto come prima: il
+     pulsante attivo nel selettore di fase qui sopra (sempre visibile)
+     indica già in ogni momento quale fase si sta scorrendo. */
   .pcol-weighted, .pcol-action { display: none; }
   .tile-row-3, .tile-row-4, .tile-row-5 { grid-template-columns: repeat(2, 1fr); }
   .chart-grid { grid-template-columns: 1fr; }

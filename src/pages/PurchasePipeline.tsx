@@ -75,6 +75,12 @@ export function PurchasePipeline() {
   const [showActivityForm, setShowActivityForm] = useState(false)
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [highlightedId, setHighlightedId] = useState<string | null>(null)
+  // Selettore di stato (richiesta di Andrea ott 2026, "stessa cosa" fatta
+  // nella Pipeline clienti): su telefono le tre colonne impilate rendevano
+  // scomoda la vista — un selettore sempre visibile in alto permette di
+  // mostrarne una sola alla volta. "all" = mostra tutti gli stati, come
+  // sempre (anche su desktop).
+  const [statusFilter, setStatusFilter] = useState<RequestStatus | 'all'>('all')
 
   const canAccess = profile ? CAN_ACCESS.includes(profile.role) : false
 
@@ -234,9 +240,30 @@ export function PurchasePipeline() {
       {!activitiesLoading && !acquistiRequestsLoading && acquistiRequests.length === 0 && !showActivityForm && (
         <p className="muted">Nessuna richiesta registrata ancora.</p>
       )}
+
       {!activitiesLoading && !acquistiRequestsLoading && acquistiRequests.length > 0 && (
-        <div className="kanban-board">
-          {ACQUISTI_REQUEST_STATUSES.map((status) => {
+        <div className="pipeline-filters-sticky">
+          <div className="pipeline-stage-filter">
+            <button type="button" className={statusFilter === 'all' ? 'active' : ''} onClick={() => setStatusFilter('all')}>
+              Tutti gli stati
+            </button>
+            {ACQUISTI_REQUEST_STATUSES.map((status) => (
+              <button
+                key={status}
+                type="button"
+                className={statusFilter === status ? 'active' : ''}
+                onClick={() => setStatusFilter(status)}
+              >
+                {ACQUISTI_REQUEST_STATUS_LABELS[status]}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!activitiesLoading && !acquistiRequestsLoading && acquistiRequests.length > 0 && (
+        <div className={'kanban-board' + (statusFilter !== 'all' ? ' kanban-board-single' : '')}>
+          {ACQUISTI_REQUEST_STATUSES.filter((status) => statusFilter === 'all' || status === statusFilter).map((status) => {
             const rows = acquistiRequests.filter((r) => r.status === status)
             return (
               <div key={status} className="kanban-col">
