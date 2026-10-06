@@ -941,6 +941,31 @@ function DealDetails({
     <div className="kanban-card-expanded" onClick={(e) => e.stopPropagation()}>
       <StagePath deal={deal} canEdit={canEditFields} compact={compact} onChangeStage={onChangeStage} />
       <ActivityDetailsView details={deal.activity_details} />
+      {deal.proposal_type && (
+        <div className="activity-fields-block">
+          <span className="activity-fields-title">Proposta inviata</span>
+          <div className="field-row">
+            <label className="field-label">Tipo di proposta</label>
+            <span>{PROPOSAL_TYPE_LABELS[deal.proposal_type]}</span>
+          </div>
+          <div className="field-row">
+            <label className="field-label">Codice riferimento</label>
+            <span>{deal.proposal_reference_code || '—'}</span>
+          </div>
+          {deal.proposal_value !== null && (
+            <div className="field-row">
+              <label className="field-label">Valore</label>
+              <span>{currency.format(deal.proposal_value)}</span>
+            </div>
+          )}
+          {deal.proposal_quantity !== null && (
+            <div className="field-row">
+              <label className="field-label">Quantità</label>
+              <span>{deal.proposal_quantity}</span>
+            </div>
+          )}
+        </div>
+      )}
       <div className="field-row">
         <label className="field-label">Utente</label>
         <span>{owners.find((p) => p.id === deal.owner_id)?.full_name ?? '— Nessuno —'}</span>
@@ -1136,6 +1161,10 @@ function NewDealForm({
   const [newClientContact, setNewClientContact] = useState('')
 
   const [requiresTechValidation, setRequiresTechValidation] = useState(false)
+  // Nota generale del lead (richiesta di Andrea ott 2026): prima si poteva
+  // scrivere solo DOPO aver creato il lead, aprendo il dettaglio — qui si
+  // può già inserire in fase di creazione.
+  const [note, setNote] = useState('')
   const [saving, setSaving] = useState(false)
 
   // Tipo di attività: determina quale set di campi guidati mostrare. Va in
@@ -1513,6 +1542,7 @@ function NewDealForm({
         stage: 'lead',
         owner_id: defaultOwnerId,
         requires_tech_validation: requiresTechValidation,
+        note: note.trim(),
         activity_details: activityDetails,
         next_action: nextAction,
       })
@@ -1626,6 +1656,16 @@ function NewDealForm({
         />
         Richiede validazione tecnica
       </label>
+
+      <div className="field-row">
+        <label className="field-label">Nota</label>
+        <textarea
+          className="note-field"
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Nota (facoltativa)…"
+        />
+      </div>
 
       <div className="field-row">
         <label className="field-label">Tipo di attività</label>
