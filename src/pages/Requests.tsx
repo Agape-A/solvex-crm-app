@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { CommentThread } from '../components/CommentThread'
 import { RefPicker } from '../components/RefPicker'
+import { IconChevronsLeft } from '../components/Icons'
 import { describeRef, refLinkPath, REQUEST_REF_LABELS, REQUEST_REF_TABLES, type RequestRefTable } from '../lib/refRecords'
 import { type Client, type Profile, type Request, type RequestDepartment, type RequestPriority, type RequestStatus } from '../lib/types'
 
@@ -276,7 +277,7 @@ export function Requests() {
         <p className="muted">Nessuna richiesta corrisponde ai filtri selezionati.</p>
       )}
 
-      <div className="req-layout">
+      <div className={'req-layout' + (selected ? ' req-layout-detail-open' : '')}>
         <div className="card req-list">
           {visibleRequests.map((r) => (
             <div
@@ -306,6 +307,9 @@ export function Requests() {
           {!selected && <p className="muted">Seleziona una richiesta dall'elenco.</p>}
           {selected && (
             <>
+              <button type="button" className="detail-back-btn" onClick={() => setSelected(null)}>
+                <IconChevronsLeft /> Torna all'elenco
+              </button>
               <div className="eyebrow">
                 {selected.department} · {selected.type === 'interna' ? 'richiesta interna' : 'richiesta esterna'}
               </div>

@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { CommentThread } from '../components/CommentThread'
+import { IconChevronsLeft } from '../components/Icons'
 import { ActivityDetailsView } from './Pipeline'
 import {
   APPOINTMENT_TYPE_LABELS,
@@ -265,7 +266,7 @@ export function Clients() {
       {loading && <p className="muted">Caricamento…</p>}
       {!loading && filtered.length === 0 && <p className="muted">Nessun cliente in questa categoria.</p>}
 
-      <div className="req-layout">
+      <div className={'req-layout' + (selected ? ' req-layout-detail-open' : '')}>
         <div className="card client-list">
           {filtered.map((c) => (
             <div
@@ -307,6 +308,7 @@ export function Clients() {
               deleting={deleting}
               onChange={(patch) => updateClient(selected, patch)}
               onDelete={() => deleteClient(selected)}
+              onBack={() => setSelected(null)}
             />
           )}
         </div>
@@ -513,6 +515,7 @@ function ClientDetail({
   deleting,
   onChange,
   onDelete,
+  onBack,
 }: {
   client: Client
   canWrite: boolean
@@ -529,6 +532,11 @@ function ClientDetail({
   deleting: boolean
   onChange: (patch: Partial<Client>) => void
   onDelete: () => void
+  // Su telefono lista e dettaglio non stanno più una sopra l'altra: il
+  // dettaglio sostituisce la lista a tutto schermo, quindi serve un modo per
+  // tornare indietro (richiesta di Andrea ott 2026). Il bottone esiste
+  // sempre, resta nascosto da CSS sopra gli 860px dove non serve.
+  onBack: () => void
 }) {
   // Campi testuali: valore locale + salvataggio su blur (come nelle note
   // della pipeline), così non si scrive ad ogni singola lettera digitata.
@@ -564,6 +572,9 @@ function ClientDetail({
 
   return (
     <div className="client-detail-body">
+      <button type="button" className="detail-back-btn" onClick={onBack}>
+        <IconChevronsLeft /> Torna all'elenco
+      </button>
       <div className="eyebrow">
         {CLIENT_TYPE_LABELS[client.client_type]} · {client.country}
       </div>

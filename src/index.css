@@ -286,6 +286,16 @@ a.tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border
 .pill-lavorazione { background: #fdecc8; color: #c98a00; }
 .pill-risolta { background: #dcf5dc; color: #0ca30c; }
 .detail-panel { padding: 20px; }
+/* Bottone "torna all'elenco" dentro il dettaglio (richiesta di Andrea ott
+   2026, Clienti/Richieste): serve solo su telefono, dove lista e dettaglio
+   non stanno più una sopra l'altra ma si sostituiscono a vicenda — vedi
+   .req-layout-detail-open nel media query sotto. Su desktop resta nascosto. */
+.detail-back-btn {
+  display: none; align-items: center; gap: 6px; border: none; background: none;
+  color: var(--accent); font-weight: 700; font-size: 13px; cursor: pointer;
+  padding: 0 0 14px; font-family: inherit;
+}
+.detail-back-btn svg { width: 16px; height: 16px; }
 .eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); font-weight: 700; margin-bottom: 6px; }
 .stage-btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .stage-btn {
@@ -504,7 +514,10 @@ a.tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border
 
 .barlist { display: flex; flex-direction: column; gap: 10px; }
 .barlist-row { display: grid; grid-template-columns: 110px 1fr auto; align-items: center; gap: 10px; }
-.barlist-label { font-size: 12px; color: var(--ink-2); text-transform: capitalize; }
+.barlist-label {
+  font-size: 12px; color: var(--ink-2); text-transform: capitalize;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0;
+}
 .barlist-track { height: 10px; border-radius: 5px; background: var(--surface-2); overflow: hidden; }
 .barlist-fill { height: 100%; border-radius: 5px; min-width: 3px; transition: width .3s ease; }
 .barlist-value { font-size: 12px; font-weight: 700; white-space: nowrap; text-align: right; min-width: 60px; }
@@ -846,18 +859,51 @@ a.client-deal-row:hover { background: var(--surface-2); border-radius: 6px; }
   .mobile-nav-close svg { width: 17px; height: 17px; }
 
   .tile-row, .req-layout { grid-template-columns: 1fr; }
+
+  /* Clienti/Richieste su telefono: invece di impilare lista e dettaglio (che
+     sembrava "non succede niente" al tocco, perché il dettaglio appariva
+     sotto, fuori vista), il dettaglio sostituisce la lista a schermo
+     intero, con un bottone per tornare indietro. */
+  .req-layout.req-layout-detail-open .client-list,
+  .req-layout.req-layout-detail-open .req-list { display: none; }
+  .req-layout:not(.req-layout-detail-open) .detail-panel { display: none; }
+  .detail-back-btn { display: flex; }
   .kanban-board { grid-template-columns: 1fr; }
   .pipeline-summary { grid-template-columns: repeat(2, 1fr); }
-  .pipeline-view-toggle { margin-left: 0; }
+  /* Vista Elenco non utilizzabile su telefono (richiesta di Andrea ott
+     2026): resta solo la Bacheca, quindi il selettore non serve più. */
+  .pipeline-view-toggle { display: none; }
+
+  /* Intestazione di colonna (Nuovo Contatto / Sviluppo Contatto / Proposta
+     inviata) sempre visibile mentre si scorrono le trattative di quella
+     colonna, invece di sparire subito scorrendo verso il basso. */
+  .kanban-col-head {
+    position: sticky; top: 54px; z-index: 5;
+    background: var(--surface-2);
+    margin: -16px -16px 0;
+    padding: 14px 16px 10px;
+    border-radius: 12px 12px 0 0;
+  }
   .pcol-weighted, .pcol-action { display: none; }
   .tile-row-3, .tile-row-4, .tile-row-5 { grid-template-columns: repeat(2, 1fr); }
   .chart-grid { grid-template-columns: 1fr; }
-  .barlist-row { grid-template-columns: 80px 1fr auto; }
+  .barlist-row { grid-template-columns: 72px 1fr auto; gap: 6px; }
+  .barlist-value { min-width: 42px; }
   .cal-row { flex-wrap: wrap; }
   .client-row { grid-template-columns: 1fr; }
   .import-map-grid { grid-template-columns: 1fr; }
   .view-head { flex-wrap: wrap; gap: 10px; }
   .field-row-2 { grid-template-columns: 1fr; }
+
+  /* Chat su telefono (richiesta di Andrea ott 2026): l'altezza era calcolata
+     senza contare la nuova barra fissa in alto (54px), tagliando il fondo
+     della finestra (riga di scrittura inclusa). La fila di canali (Generale
+     + reparti) ora scorre in orizzontale invece di uscire dallo schermo. */
+  .chat-view { height: calc(100vh - 102px); }
+  .chat-mode-toggle {
+    max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch;
+  }
+  .chat-mode-toggle button { flex: none; }
 }
 
 /* Pallino di notifica nel menu laterale (Chat, Richieste) */
