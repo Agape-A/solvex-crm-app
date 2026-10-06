@@ -8,7 +8,7 @@ interface AuthState {
   profile: Profile | null
   loading: boolean
   signInWithOtp: (email: string) => Promise<{ error: string | null }>
-  // Verifica del codice a 6 cifre (richiesta di Andrea ott 2026: nell'app
+  // Verifica del codice ricevuto via email (richiesta di Andrea ott 2026: nell'app
   // installata su iPhone/Mac il link di accesso ricevuto via email si apre
   // sempre nel browser normale, mai dentro l'app installata, perché hanno
   // una loro memoria separata. Il codice, letto dall'email e digitato a

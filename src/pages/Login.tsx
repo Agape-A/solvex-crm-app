@@ -8,10 +8,13 @@ export function Login() {
   const [status, setStatus] = useState<'idle' | 'sending' | 'sent' | 'error'>('idle')
   const [error, setError] = useState<string | null>(null)
 
-  // Codice a 6 cifre in alternativa al link (richiesta di Andrea ott 2026):
-  // nell'app installata su iPhone/Mac il link via email si apre sempre nel
-  // browser normale e non dentro l'app, perché hanno memorie separate. Il
-  // codice, letto dall'email e digitato qui, resta dentro la stessa finestra.
+  // Codice in alternativa al link (richiesta di Andrea ott 2026): nell'app
+  // installata su iPhone/Mac il link via email si apre sempre nel browser
+  // normale e non dentro l'app, perché hanno memorie separate. Il codice,
+  // letto dall'email e digitato qui, resta dentro la stessa finestra.
+  // Lunghezza non fissa: il {{ .Token }} generato da Supabase non è sempre
+  // di 6 cifre (dipende dalla configurazione del progetto), quindi il campo
+  // accetta qualunque codice così com'è, senza imporre una lunghezza esatta.
   const [code, setCode] = useState('')
   const [codeStatus, setCodeStatus] = useState<'idle' | 'checking' | 'error'>('idle')
   const [codeError, setCodeError] = useState<string | null>(null)
@@ -78,8 +81,8 @@ export function Login() {
         <form className="login-card login-card-code" onSubmit={handleCodeSubmit}>
           <p className="muted">
             Se hai installato l'app sulla schermata Home o nel Dock, il link sopra si apre nel
-            browser normale, non dentro l'app. Usa invece il codice a 6 cifre che trovi nella
-            stessa email:
+            browser normale, non dentro l'app. Usa invece il codice che trovi nella stessa
+            email:
           </p>
           <label className="field-label" htmlFor="otp-code">
             Codice di accesso
@@ -89,11 +92,11 @@ export function Login() {
             type="text"
             inputMode="numeric"
             autoComplete="one-time-code"
-            maxLength={6}
+            maxLength={12}
             required
             value={code}
             onChange={(e) => setCode(e.target.value)}
-            placeholder="123456"
+            placeholder="Codice dall'email"
           />
           <button className="btn" type="submit" disabled={codeStatus === 'checking' || code.trim() === ''}>
             {codeStatus === 'checking' ? 'Verifica in corso…' : 'Conferma codice'}
