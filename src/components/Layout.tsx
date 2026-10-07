@@ -288,9 +288,20 @@ function PushButton({ collapsed }: { collapsed: boolean }) {
     setBusy(false)
   }
 
+  // Testo esplicito "ON/OFF" invece di un solo aggettivo (richiesta di
+  // Andrea, ott 2026: "altrimenti non si capisce") + sfondo pieno colorato
+  // quando è attivo, non solo un bordino, per non lasciare dubbi sullo stato.
   const label =
-    status === 'active' ? 'Notifiche attive' : status === 'denied' ? 'Notifiche bloccate' : 'Attiva notifiche'
-  const title = collapsed ? label : error ?? (status === 'denied' ? 'Permesso negato nel browser' : undefined)
+    status === 'active'
+      ? 'Notifiche: ON'
+      : status === 'denied'
+        ? 'Notifiche bloccate'
+        : busy
+          ? 'Attivazione…'
+          : 'Notifiche: OFF'
+  const title = collapsed
+    ? label
+    : error ?? (status === 'denied' ? 'Permesso negato nel browser' : status === 'active' ? 'Premi per disattivare' : 'Premi per attivare')
 
   return (
     <button
@@ -302,6 +313,7 @@ function PushButton({ collapsed }: { collapsed: boolean }) {
     >
       <IconBell />
       <span className="btn-label">{label}</span>
+      {status === 'active' && <span className="push-status-dot" />}
     </button>
   )
 }
