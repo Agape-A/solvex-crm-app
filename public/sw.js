@@ -43,7 +43,19 @@ self.addEventListener('push', (event) => {
     data: { url: data.url || '/' },
   }
 
-  event.waitUntil(self.registration.showNotification(title, options))
+  event.waitUntil(
+    Promise.all([
+      self.registration.showNotification(title, options),
+      // Numero sul pallino rosso dell'icona dell'app, stile iPhone
+      // (richiesta di Andrea, ott 2026). "badge" qui nel payload è il totale
+      // dei non letti calcolato dalla Edge Function al momento dell'invio
+      // (vedi supabase/functions/push-send), non l'icona monocromatica di
+      // sopra (quella è un'altra cosa, built-in della Notification stessa).
+      'setAppBadge' in self.navigator
+        ? self.navigator.setAppBadge(data.badge || 0).catch(() => {})
+        : Promise.resolve(),
+    ])
+  )
 })
 
 // Toccando la notifica si apre (o si porta avanti) l'app, sulla pagina

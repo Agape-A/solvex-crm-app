@@ -181,6 +181,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [profile?.id, profile?.role, profile?.department])
 
+  // ============ Pallino rosso sull'icona dell'app (stile iPhone) ============
+  // Richiesta di Andrea, ott 2026: "non appare il numero delle notifiche nel
+  // classico cerchio rosso". Qui si tiene aggiornato il badge MENTRE l'app è
+  // aperta, sommando i tre contatori già calcolati sopra (chat + richieste +
+  // commenti) — lo stesso numero che spariva una notifica alla volta quando
+  // arrivava via push ad app chiusa viene aggiornato qui in tempo reale non
+  // appena qualcosa viene segnato come letto. "setAppBadge" non esiste in
+  // tutti i browser (richiede l'app installata su iOS/macOS): il controllo
+  // 'setAppBadge' in navigator evita un errore dove manca.
+
+  useEffect(() => {
+    if (!('setAppBadge' in navigator)) return
+    const commentsTotal = (Object.values(unreadCommentsByTable) as number[]).reduce((sum, n) => sum + n, 0)
+    const total = unreadChatCount + newRequestsCount + commentsTotal
+    const task =
+      total > 0 ? (navigator as Navigator & { setAppBadge: (n: number) => Promise<void> }).setAppBadge(total) : (navigator as Navigator & { clearAppBadge: () => Promise<void> }).clearAppBadge()
+    task.catch(() => {
+      // Nessun badge disponibile in questo contesto (es. non installata): non
+      // è un errore da segnalare all'utente, semplicemente non si vede.
+    })
+  }, [unreadChatCount, newRequestsCount, unreadCommentsByTable])
+
   async function markCommentsSeen(refTable: CommentRefTable, refId: string) {
     if (!profile) return
     const { error } = await supabase

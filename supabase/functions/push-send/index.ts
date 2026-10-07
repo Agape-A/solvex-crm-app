@@ -59,18 +59,34 @@ Deno.serve(async (req) => {
 
   const { data: subs, error } = await supabase
     .from('push_subscriptions')
-    .select('id, endpoint, p256dh, auth_key')
+    .select('id, profile_id, endpoint, p256dh, auth_key')
     .in('profile_id', profileIds)
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 })
   }
 
-  const payloadStr = JSON.stringify({ title, body, url })
+  // Numero sul pallino rosso dell'icona (richiesta di Andrea, ott 2026):
+  // calcolato per ogni destinatario, non uno uguale per tutti — due persone
+  // possono avere un numero di non letti diverso nello stesso istante. Una
+  // query sola per profilo distinto, anche se più dispositivi condividono
+  // lo stesso profilo (telefono + Mac), per non ripeterla inutilmente.
+  const distinctProfileIds = [...new Set((subs ?? []).map((s) => s.profile_id))]
+  const badgeByProfile = new Map<string, number>()
+  await Promise.all(
+    distinctProfileIds.map(async (profileId) => {
+      const { data: count, error: badgeError } = await supabase.rpc('total_unread_count', {
+        p_profile_id: profileId,
+      })
+      badgeByProfile.set(profileId, badgeError ? 0 : (count as number) ?? 0)
+    }),
+  )
 
   await Promise.all(
     (subs ?? []).map(async (sub) => {
       try {
+        const badge = badgeByProfile.get(sub.profile_id) ?? 0
+        const payloadStr = JSON.stringify({ title, body, url, badge })
         await webpush.sendNotification(
           { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth_key } },
           payloadStr,
