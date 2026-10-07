@@ -115,8 +115,10 @@ function UserRow({
   return (
     <div className="target-admin-row">
       <div className="target-admin-name">
-        <strong>{user.email ?? '—'}</strong>
-        <span className="muted">iscritto il {new Date(user.created_at).toLocaleDateString('it-IT')}</span>
+        <strong>{user.full_name || user.email || '—'}</strong>
+        <span className="muted">
+          {user.email ?? '—'} · iscritto il {new Date(user.created_at).toLocaleDateString('it-IT')}
+        </span>
       </div>
       <div className="target-admin-inputs">
         <input value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Nome e cognome" />
