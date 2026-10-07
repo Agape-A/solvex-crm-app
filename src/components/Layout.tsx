@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { CLIENT_TYPE_LABELS, hasFullAccess, type Client, type CommentRefTable, type UserRole } from '../lib/types'
+import { CLIENT_TYPE_LABELS, hasFullAccess, type Client, type CommentRefTable, type Profile, type UserRole } from '../lib/types'
 import { disablePush, enablePush, getPushStatus, pushSupported, type PushStatus } from '../lib/push'
 import {
   IconDashboard,
@@ -51,7 +51,7 @@ import {
 // vivono in quella pagina (vedi i call-site in Pipeline/Requests/
 // PurchasePipeline/Suppliers/Clients/Calendar/Research.tsx). Resta distinto
 // dal pallino "Richieste"/"Chat" anche quando compare sulla stessa voce.
-const NAV: {
+export const NAV: {
   to: string
   label: string
   icon: typeof IconDashboard
@@ -114,6 +114,29 @@ const NAV: {
   { to: '/chat', label: 'Chat', icon: IconChat, badgeKey: 'chat' },
   { to: '/utenti', label: 'Utenti', icon: IconUsers, roles: ['dirigente', 'amministrazione'] },
 ]
+
+// Usata sia per nascondere le voci di menu qui sotto sia per bloccare
+// l'apertura diretta della pagina (vedi ProtectedRoute.tsx) — richiesta di
+// Andrea, ott 2026: "spuntare le pagine che può vedere, in modo da creare
+// velocemente policy". Dashboard e Chat (le voci senza "roles" qui sopra)
+// restano sempre visibili, non sono spuntabili: evita che una persona
+// resti senza nemmeno le pagine di base per una dimenticanza nella lista.
+//
+// NOTA IMPORTANTE (spiegata anche ad Andrea): questo decide solo cosa si
+// VEDE nel sito (menu + apertura delle pagine). I permessi veri su cosa si
+// può leggere/modificare restano decisi dal ruolo tramite le regole di
+// sicurezza del database (RLS), esattamente come prima di questa funzione.
+export function canSeePage(to: string, profile: Profile | null | undefined): boolean {
+  // Dirigente e amministrazione vedono sempre tutto, invariante di sempre
+  // in questo progetto (vedi hasFullAccess) — un override per pagine non
+  // li restringe mai, per non rischiare che si chiudano fuori da soli da
+  // "Utenti" per una spunta sbagliata.
+  if (hasFullAccess(profile?.role)) return true
+  const item = NAV.find((n) => n.to === to)
+  if (!item || !item.roles) return true
+  if (profile?.page_overrides) return profile.page_overrides.includes(to)
+  return item.roles.includes(profile?.role as UserRole)
+}
 
 const SIDEBAR_COLLAPSED_KEY = 'solvex-sidebar-collapsed'
 
@@ -206,7 +229,7 @@ export function Layout({ children }: { children: ReactNode }) {
         </div>
         {!collapsed && <ClientSearch />}
         <nav className="nav">
-          {NAV.filter((item) => !item.roles || item.roles.includes(profile?.role as UserRole) || hasFullAccess(profile?.role)).map((item) => {
+          {NAV.filter((item) => canSeePage(item.to, profile)).map((item) => {
             const Icon = item.icon
             const badgeCount = item.badgeKey ? badgeCounts[item.badgeKey] : 0
             const commentCount = commentBadgeCount(item.commentTables)

@@ -71,7 +71,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           // messaggio di attesa invece di un errore secco.
           console.error('Impossibile caricare il profilo', error)
         }
-        setProfile((data as Profile) ?? null)
+        const loadedProfile = (data as Profile) ?? null
+        if (loadedProfile && loadedProfile.active === false) {
+          // Account sospeso (richiesta di Andrea, ott 2026). Il ban vero è
+          // lato Supabase Auth (blocca nuovi accessi e il refresh del
+          // token), ma un token già valido può restare attivo fino a
+          // un'ora: qui chiudiamo subito anche una sessione già aperta,
+          // invece di aspettare che scada da sola.
+          supabase.auth.signOut()
+          setProfile(null)
+          setLoading(false)
+          return
+        }
+        setProfile(loadedProfile)
         setLoading(false)
       })
   }, [session])

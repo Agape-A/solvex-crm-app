@@ -562,6 +562,11 @@ a.tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border
 .target-admin-inputs input[type="number"] { width: 100px; }
 .target-admin-note { width: 160px; }
 .target-admin-progress { margin-left: auto; font-size: 12px; }
+.target-admin-pages {
+  display: flex; flex-direction: column; gap: 8px; padding: 10px 0 14px; width: 100%;
+  border-top: 1px dashed var(--border); margin-top: 4px;
+}
+.target-admin-pages-grid { display: flex; flex-wrap: wrap; gap: 10px 18px; }
 .goal-update-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
 .goal-update-row input[type="number"] { width: 100px; }
 .goal-add-form { display: flex; align-items: flex-end; gap: 10px; flex-wrap: wrap; margin-bottom: 16px; }

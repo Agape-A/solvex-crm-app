@@ -90,6 +90,14 @@ export interface Profile {
   // 0029_notifiche_badge.sql) — usata da AuthContext.tsx per contare i
   // messaggi non letti dopo l'ultima volta che l'utente ha aperto la Chat.
   chat_last_seen_at: string
+  // Sospensione e pagine personalizzate (0047_sospensione_pagine_utenti.sql,
+  // richiesta di Andrea ott 2026). page_overrides null = segue il ruolo
+  // (comportamento di sempre); un array (anche vuoto) sostituisce la lista
+  // di pagine visibili indipendentemente dal ruolo — vedi canSeePage() in
+  // Layout.tsx. Riguarda solo il menu/l'apertura delle pagine, non i
+  // permessi sui dati (quelli restano della RLS, per ruolo).
+  active: boolean
+  page_overrides: string[] | null
 }
 
 export interface Client {

@@ -67,26 +67,51 @@ del CRM).
 Per ogni collega successivo, niente più Supabase: dalla pagina **Utenti**
 (visibile solo a dirigente/amministrazione) compila nome, email, ruolo e
 reparto e premi "Invita" — arriva un'email con il link di accesso, già con
-il ruolo giusto impostato. Questo richiede di creare anche la Edge Function
-"invite-user" (vedi sezione 6bis qui sotto) — finché non è creata, l'unico
-modo per aggiungere qualcuno resta Supabase, **Authentication → Users →
-Invite**, seguito dalla correzione manuale del ruolo nella pagina "Utenti".
+il ruolo giusto impostato. Dalla stessa pagina puoi anche:
 
-## 6. Gestione utenti: la funzione "invite-user" (da creare una volta sola)
+- **Sospendere/riattivare** una persona: blocca subito l'accesso (non può
+  più entrare) senza toccare il suo storico — trattative, richieste,
+  commenti restano. È la via consigliata per chi lascia l'azienda.
+- **Eliminare per sempre** un account — solo se non ha ancora nessun dato
+  collegato (nessuna trattativa, richiesta, commento...): altrimenti il
+  pulsante risponde con un messaggio che lo spiega e suggerisce "Sospendi".
+- **Scegliere quali pagine del menu vede**, persona per persona, spuntandole
+  — indipendentemente dal ruolo. Attenzione: questo decide solo cosa si
+  *vede* nel sito (menu e apertura delle pagine); i permessi veri su cosa si
+  può leggere/modificare restano decisi dal ruolo, come sempre.
 
-Stessi passi della funzione "push-send" (sezione 6), ma più semplice: niente
+Tutto questo richiede di creare la Edge Function "manage-users" (vedi
+sezione 6 qui sotto) e di eseguire la migrazione `0047` — finché non sono
+fatte, l'unico modo per aggiungere qualcuno resta Supabase,
+**Authentication → Users → Invite**, seguito dalla correzione manuale del
+ruolo nella pagina "Utenti"; sospensione/eliminazione/pagine non sono
+disponibili.
+
+## 6. Gestione utenti: la funzione "manage-users" (da creare una volta sola)
+
+Stessi passi della funzione "push-send" (sezione 7), ma più semplice: niente
 segreti da impostare, e **la verifica JWT va lasciata ATTIVA** (il contrario
 di push-send) perché qui a chiamare è il browser di chi è loggato, non il
 database.
 
-1. Supabase → **Edge Functions** → **Deploy a new function** → **Via
-   Editor** → nome esatto `invite-user`.
-2. Incolla il contenuto di `supabase/functions/invite-user/index.ts` e fai
+1. Esegui la migrazione `supabase/migrations/0047_sospensione_pagine_utenti.sql`
+   dalla SQL Editor di Supabase (aggiunge le colonne `active` e
+   `page_overrides` a `profiles`), se non l'hai già fatto con `supabase db push`
+   o incollandola a mano.
+2. Supabase → **Edge Functions** → **Deploy a new function** → **Via
+   Editor** → nome esatto `manage-users`.
+   - Se avevi già creato una funzione chiamata `invite-user` nelle settimane
+     scorse: lasciala pure, non serve cancellarla, ma il CRM ora chiama
+     `manage-users` — senza questa il pulsante "Invita" (e i nuovi
+     "Sospendi"/"Elimina") non funzionano.
+3. Incolla il contenuto di `supabase/functions/manage-users/index.ts` e fai
    **Deploy**.
-3. Non serve impostare nessun segreto: la funzione usa solo le variabili che
+4. Non serve impostare nessun segreto: la funzione usa solo le variabili che
    Supabase fornisce già da sola a ogni funzione.
-4. Prova: dalla pagina "Utenti" del CRM, invita te stesso con un'altra tua
-   email (o un collega) e verifica che arrivi l'email di invito.
+5. Prova: dalla pagina "Utenti" del CRM, invita te stesso con un'altra tua
+   email (o un collega) e verifica che arrivi l'email di invito; prova poi
+   "Sospendi" su un account di prova e verifica che non riesca più ad
+   accedere.
 
 ## 7. Notifiche push (opzionale)
 
