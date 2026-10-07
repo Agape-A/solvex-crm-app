@@ -88,6 +88,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       })
   }, [session])
 
+  // ============ Permessi in tempo reale (sospensione, pagine, ruolo) ============
+  // Richiesta di Andrea, ott 2026: senza questo, chi aveva già la pagina
+  // aperta continuava a vedere tutto (o a restare dentro) fino al prossimo
+  // refresh, anche dopo che un dirigente lo sospendeva o gli cambiava le
+  // pagine visibili dalla pagina "Utenti" — qui il profilo si aggiorna da
+  // solo non appena cambia nel database, senza dover ricaricare la pagina.
+  // Richiede che la tabella "profiles" abbia la Realtime attiva (Supabase →
+  // Database → Replication), come già per "requests"/"chat_messages" qui
+  // sotto — se non lo è ancora, questo effetto semplicemente non riceve
+  // eventi (nessun errore, ma nessun aggiornamento live).
+  useEffect(() => {
+    if (!session) return
+
+    const channel = supabase
+      .channel('own_profile_changes')
+      .on(
+        'postgres_changes',
+        { event: 'UPDATE', schema: 'public', table: 'profiles', filter: `id=eq.${session.user.id}` },
+        (payload) => {
+          const updated = payload.new as Profile
+          if (updated.active === false) {
+            supabase.auth.signOut()
+            setProfile(null)
+            return
+          }
+          setProfile(updated)
+        },
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [session])
+
   // ============ Notifiche: pallino su "Richieste" ============
   // Conta le richieste con status "nuova". La RLS su "requests" filtra già
   // per ruolo/reparto lato database, quindi questa count query restituisce
