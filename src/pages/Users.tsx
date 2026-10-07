@@ -1,14 +1,96 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { ALL_ROLES, REQUEST_DEPARTMENTS, ROLE_LABELS, type Profile, type RequestDepartment, type UserRole } from '../lib/types'
+import { ALL_ROLES, hasFullAccess, REQUEST_DEPARTMENTS, ROLE_LABELS, type Profile, type RequestDepartment, type UserRole } from '../lib/types'
 
-// Pagina "Utenti", riservata alla direzione: qui si corregge il nome e il
-// ruolo di chi è già stato invitato. Creare un nuovo account resta un
-// passaggio da fare a mano dal pannello Supabase (Authentication → Users →
-// Invite), perché richiede privilegi che il CRM non può avere lato browser
-// — vedi le istruzioni mandate a parte. Una volta che la persona esiste,
-// compare qui con il ruolo di default "Operatore" e va corretta.
+// Pagina "Utenti", riservata alla direzione (dirigente/amministrazione):
+// qui si invita una nuova persona via email con ruolo e reparto già giusti
+// (InviteForm, sotto — richiesta di Andrea, ott 2026: "dobbiamo inserire
+// tutti gli utenti e le policy"), e si corregge nome/ruolo/reparto di chi è
+// già dentro (UserRow). Prima, creare un account richiedeva aprire Supabase
+// e usare Authentication → Users → Invite a mano — ora basta questa pagina.
+
+function InviteForm({ onInvited }: { onInvited: () => void }) {
+  const [fullName, setFullName] = useState('')
+  const [email, setEmail] = useState('')
+  const [role, setRole] = useState<UserRole>('operatore')
+  const [department, setDepartment] = useState<RequestDepartment | ''>('')
+  const [sending, setSending] = useState(false)
+
+  async function handleInvite(e: FormEvent) {
+    e.preventDefault()
+    setSending(true)
+    const { data, error } = await supabase.functions.invoke('invite-user', {
+      body: {
+        full_name: fullName.trim(),
+        email: email.trim(),
+        role,
+        department: department || null,
+        redirect_to: window.location.origin,
+      },
+    })
+    setSending(false)
+
+    if (error) {
+      // La funzione risponde con un messaggio chiaro nel corpo anche sugli
+      // errori (es. "Questa email ha già un account.") — proviamo a
+      // leggerlo, altrimenti mostriamo il messaggio generico di supabase-js.
+      let message = error.message
+      try {
+        const body = await (error as unknown as { context: Response }).context.json()
+        if (body?.error) message = body.error
+      } catch {
+        // risposta non JSON: teniamo il messaggio generico
+      }
+      alert("Non è stato possibile inviare l'invito: " + message)
+      return
+    }
+
+    alert(`Invito inviato a ${email.trim()}. Riceverà un'email con il link per accedere.`)
+    setFullName('')
+    setEmail('')
+    setRole('operatore')
+    setDepartment('')
+    onInvited()
+  }
+
+  return (
+    <form className="card panel goal-add-form" onSubmit={handleInvite}>
+      <div className="field-row">
+        <label className="field-label">Nome e cognome</label>
+        <input value={fullName} onChange={(e) => setFullName(e.target.value)} required placeholder="Es. Maria Rossi" />
+      </div>
+      <div className="field-row">
+        <label className="field-label">Email</label>
+        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required placeholder="maria.rossi@email.it" />
+      </div>
+      <div className="field-row">
+        <label className="field-label">Ruolo</label>
+        <select value={role} onChange={(e) => setRole(e.target.value as UserRole)}>
+          {ALL_ROLES.map((r) => (
+            <option key={r} value={r}>
+              {ROLE_LABELS[r]}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="field-row">
+        <label className="field-label">Reparto</label>
+        <select value={department} onChange={(e) => setDepartment(e.target.value as RequestDepartment | '')} title="Reparto (per l'assegnazione delle richieste)">
+          <option value="">— Nessun reparto —</option>
+          {REQUEST_DEPARTMENTS.map((d) => (
+            <option key={d} value={d}>
+              {d}
+            </option>
+          ))}
+        </select>
+      </div>
+      <button className="btn btn-primary" type="submit" disabled={sending}>
+        {sending ? 'Invio…' : 'Invita'}
+      </button>
+    </form>
+  )
+}
 
 function UserRow({
   user,
@@ -85,7 +167,7 @@ export function Users() {
     await load()
   }
 
-  if (profile?.role !== 'dirigente') {
+  if (!hasFullAccess(profile?.role)) {
     return (
       <div className="view">
         <p className="muted">Questa pagina è riservata alla direzione.</p>
@@ -99,10 +181,10 @@ export function Users() {
         <h1>Utenti</h1>
       </div>
       <p className="muted">
-        Per aggiungere una nuova persona, invitala dal pannello Supabase (Authentication → Users → Invite
-        user): le arriverà un'email con il link di accesso. Una volta accettato l'invito, compare qui sotto
-        con il ruolo "Operatore" — correggilo con quello giusto.
+        Invita una nuova persona dal modulo qui sotto: le arriverà un'email con il link per accedere, già con il
+        ruolo e il reparto che scegli — non più "Operatore" di default da correggere dopo.
       </p>
+      <InviteForm onInvited={load} />
       {loading && <p className="muted">Caricamento…</p>}
       {!loading && (
         <div className="card panel target-admin-list">

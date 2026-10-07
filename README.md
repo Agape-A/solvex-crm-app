@@ -55,17 +55,40 @@ L'app parte su `http://localhost:5173`.
 
 ## 5. Primo accesso e ruoli
 
-Il login è passwordless (magic link via email, tramite Supabase Auth): inserisci
-la tua email, arriva un link, clicchi ed entri. Al primo accesso il database
-crea automaticamente un tuo profilo con ruolo `operatore` di default.
+Il tuo primo accesso (quello di chi crea il progetto) è passwordless (magic
+link via email, tramite Supabase Auth): inserisci la tua email, arriva un
+link, clicchi ed entri. Al primo accesso il database crea automaticamente un
+tuo profilo con ruolo `operatore` di default — correggilo subito in
+`dirigente` da Supabase, **Table Editor → profiles**, modificando il campo
+`role` della tua riga (è l'unica volta che serve passare da Supabase: dopo
+questo primo passaggio puoi invitare tutti gli altri dalla pagina "Utenti"
+del CRM).
 
-Per assegnarti (o assegnare a un collega) il ruolo giusto — `tecnico`,
-`commerciale` o `dirigente` — vai su Supabase, **Table Editor → profiles**, e
-modifica il campo `role` della riga corrispondente. In una fase successiva
-vale la pena costruire una piccola schermata "Utenti" riservata ai dirigenti
-per farlo dall'app, invece che dal pannello Supabase.
+Per ogni collega successivo, niente più Supabase: dalla pagina **Utenti**
+(visibile solo a dirigente/amministrazione) compila nome, email, ruolo e
+reparto e premi "Invita" — arriva un'email con il link di accesso, già con
+il ruolo giusto impostato. Questo richiede di creare anche la Edge Function
+"invite-user" (vedi sezione 6bis qui sotto) — finché non è creata, l'unico
+modo per aggiungere qualcuno resta Supabase, **Authentication → Users →
+Invite**, seguito dalla correzione manuale del ruolo nella pagina "Utenti".
 
-## 6. Notifiche push (opzionale)
+## 6. Gestione utenti: la funzione "invite-user" (da creare una volta sola)
+
+Stessi passi della funzione "push-send" (sezione 6), ma più semplice: niente
+segreti da impostare, e **la verifica JWT va lasciata ATTIVA** (il contrario
+di push-send) perché qui a chiamare è il browser di chi è loggato, non il
+database.
+
+1. Supabase → **Edge Functions** → **Deploy a new function** → **Via
+   Editor** → nome esatto `invite-user`.
+2. Incolla il contenuto di `supabase/functions/invite-user/index.ts` e fai
+   **Deploy**.
+3. Non serve impostare nessun segreto: la funzione usa solo le variabili che
+   Supabase fornisce già da sola a ogni funzione.
+4. Prova: dalla pagina "Utenti" del CRM, invita te stesso con un'altra tua
+   email (o un collega) e verifica che arrivi l'email di invito.
+
+## 7. Notifiche push (opzionale)
 
 Con l'app installata (schermata Home su iPhone, Dock su Mac) può anche
 mandare notifiche push vere e proprie — banner, suono, badge, anche a
@@ -143,8 +166,6 @@ successivo.
 - **Allegati** (schede tecniche/SDS): la tabella `clients`/`deals` non ha
   ancora un campo per i file; Supabase Storage è la scelta naturale quando
   servirà.
-- **Interfaccia di gestione utenti** per i dirigenti, invece di editare i
-  ruoli da Supabase direttamente.
 
 ## Note di sicurezza
 
