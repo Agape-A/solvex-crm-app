@@ -52,9 +52,10 @@ alter table public.purchase_requests drop constraint if exists purchase_requests
 alter table public.purchase_requests add constraint purchase_requests_requested_by_fkey
   foreign key (requested_by) references public.profiles(id) on delete set null;
 
-alter table public.supplier_activities drop constraint if exists supplier_activities_created_by_fkey;
-alter table public.supplier_activities add constraint supplier_activities_created_by_fkey
-  foreign key (created_by) references public.profiles(id) on delete set null;
+-- (supplier_activities non esiste più — rinominata in procurement_activities
+-- in 0021_pipeline_acquisti_attivita.sql; se fosse ancora qui "alter table"
+-- fallirebbe con "relation does not exist" e fermerebbe l'intero script —
+-- esattamente l'errore incontrato da Andrea eseguendo questo file.)
 
 alter table public.procurement_activities drop constraint if exists procurement_activities_created_by_fkey;
 alter table public.procurement_activities add constraint procurement_activities_created_by_fkey

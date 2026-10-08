@@ -341,15 +341,10 @@ create policy "procurement_attachments_delete" on storage.objects
   for delete
   using (bucket_id = 'procurement-attachments' and (public.current_role() = 'dirigente' or public.current_department() = 'acquisti'));
 
-drop policy if exists "supplier_activities_select" on public.supplier_activities;
-create policy "supplier_activities_select" on public.supplier_activities
-  for select using (public.current_role() = 'dirigente' or public.current_department() = 'acquisti');
-
-drop policy if exists "supplier_activities_write" on public.supplier_activities;
-create policy "supplier_activities_write" on public.supplier_activities
-  for all
-  using (public.current_role() = 'dirigente' or public.current_department() = 'acquisti')
-  with check (public.current_role() = 'dirigente' or public.current_department() = 'acquisti');
+-- (supplier_activities non esiste più come tabella — rinominata in
+-- procurement_activities in 0021_pipeline_acquisti_attivita.sql, già
+-- gestita sopra; qui restano solo le policy sul bucket storage
+-- "supplier-attachments", che invece esiste ancora davvero.)
 
 drop policy if exists "supplier_attachments_write" on storage.objects;
 create policy "supplier_attachments_write" on storage.objects
