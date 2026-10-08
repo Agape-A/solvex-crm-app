@@ -478,6 +478,11 @@ export interface Request {
   status: RequestStatus
   assignee_id: string | null
   client_id: string | null
+  // Chi ha creato la richiesta (vedi 0051) — usato per distinguere
+  // "Inviate" (create da te) da "Ricevute" nella pagina Richieste. Null
+  // per lo storico non recuperabile con certezza, o per richieste esterne
+  // non ancora collegate a un profilo.
+  created_by: string | null
   // Collegamento generico a un record di un altro modulo (trattativa,
   // progetto, ricerca, fornitore...) — vedi src/lib/refRecords.ts e
   // 0015_richieste_collegate.sql. "clients" resta anche su client_id per

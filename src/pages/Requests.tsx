@@ -34,12 +34,25 @@ type DepartmentFilter = RequestDepartment | 'tutti'
 type RefTableFilter = RequestRefTable | 'nessuno' | 'tutti'
 type TypeFilter = 'interna' | 'esterna' | 'tutti'
 
+// "Ricevute" (richieste create da qualcun altro, per te o per il tuo
+// reparto) vs "Inviate" (create da te) — richiesto da Andrea, ott 2026,
+// per rendere più semplice la navigazione quando le richieste si
+// accumulano. Le due schede si escludono a vicenda (ogni richiesta sta
+// in una sola delle due), a differenza dei filtri di stato/reparto/tipo
+// qui sopra che si combinano tra loro.
+type InboxFilter = 'ricevute' | 'inviate'
+const INBOX_FILTER_LABELS: Record<InboxFilter, string> = {
+  ricevute: 'Ricevute',
+  inviate: 'Inviate',
+}
+
 export function Requests() {
   const { profile } = useAuth()
   const [searchParams, setSearchParams] = useSearchParams()
   const [requests, setRequests] = useState<Request[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [clients, setClients] = useState<Client[]>([])
+  const [inboxFilter, setInboxFilter] = useState<InboxFilter>('ricevute')
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('nuova')
   const [departmentFilter, setDepartmentFilter] = useState<DepartmentFilter>('tutti')
   const [refTableFilter, setRefTableFilter] = useState<RefTableFilter>('tutti')
@@ -129,6 +142,7 @@ export function Requests() {
       setDepartmentFilter('tutti')
       setRefTableFilter('tutti')
       setTypeFilter('tutti')
+      setInboxFilter(request.created_by === profile?.id ? 'inviate' : 'ricevute')
     }
     setSearchParams({}, { replace: true })
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -138,6 +152,11 @@ export function Requests() {
   // insieme a quello di stato — i conteggi sulle schede Nuova/In
   // lavorazione/... qui sotto riflettono già gli altri filtri attivi, così
   // restano coerenti con quello che si vede aprendo quella scheda.
+  function matchesInboxFilter(r: Request): boolean {
+    const createdByMe = r.created_by !== null && r.created_by === profile?.id
+    return inboxFilter === 'inviate' ? createdByMe : !createdByMe
+  }
+
   function matchesSecondaryFilters(r: Request): boolean {
     if (departmentFilter !== 'tutti' && r.department !== departmentFilter) return false
     if (refTableFilter === 'nessuno' && r.ref_table) return false
@@ -146,7 +165,12 @@ export function Requests() {
     return true
   }
 
-  const secondaryFiltered = requests.filter(matchesSecondaryFilters)
+  const inboxFiltered = requests.filter(matchesInboxFilter)
+  const inboxCounts: Record<InboxFilter, number> = {
+    inviate: requests.filter((r) => r.created_by !== null && r.created_by === profile?.id).length,
+    ricevute: requests.filter((r) => !(r.created_by !== null && r.created_by === profile?.id)).length,
+  }
+  const secondaryFiltered = inboxFiltered.filter(matchesSecondaryFilters)
 
   const statusCounts: Record<StatusFilter, number> = {
     nuova: secondaryFiltered.filter((r) => r.status === 'nuova').length,
@@ -200,12 +224,25 @@ export function Requests() {
           profiles={profiles}
           clients={clients}
           senderName={profile?.full_name ?? ''}
+          senderId={profile?.id ?? null}
           onCreated={() => {
             setShowForm(false)
             loadRequests()
           }}
         />
       )}
+
+      <div className="stage-btn-row client-filter-row">
+        {(['ricevute', 'inviate'] as InboxFilter[]).map((f) => (
+          <button
+            key={f}
+            className={'stage-btn' + (inboxFilter === f ? ' current' : '')}
+            onClick={() => setInboxFilter(f)}
+          >
+            {INBOX_FILTER_LABELS[f]} <span className="muted"> · {inboxCounts[f]}</span>
+          </button>
+        ))}
+      </div>
 
       <div className="stage-btn-row client-filter-row">
         {STATUS_FILTERS.map((s) => (
@@ -381,11 +418,13 @@ function NewRequestForm({
   profiles,
   clients,
   senderName,
+  senderId,
   onCreated,
 }: {
   profiles: Profile[]
   clients: Client[]
   senderName: string
+  senderId: string | null
   onCreated: () => void
 }) {
   const [subject, setSubject] = useState('')
@@ -407,6 +446,7 @@ function NewRequestForm({
     const { error } = await supabase.from('requests').insert({
       subject,
       sender: senderName,
+      created_by: senderId,
       client_id: clientId || null,
       ref_table: refTable || null,
       ref_id: refTable ? refId || null : null,
