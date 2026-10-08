@@ -12,7 +12,10 @@ import {
   type MarketingListMember,
 } from '../lib/types'
 
-const CAN_ACCESS: string[] = ['tecnico', 'commerciale', 'dirigente', 'amministrazione']
+// Semplificazione ruoli, ott 2026: dipendeva dal ruolo specifico
+// (tecnico/commerciale), ora dal reparto; 'amministrazione' confluisce in
+// 'dirigente' (hasFullAccess), non più un reparto a sé per l'accesso.
+const CAN_ACCESS_DEPARTMENTS: string[] = ['tecnico', 'commerciale']
 const ALL_LISTS = '__tutti__'
 // Palette categorica validata (skill dataviz): ordine fisso, mai ciclato.
 const CATEGORICAL = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100']
@@ -71,7 +74,7 @@ export function Marketing() {
   const [editingCampaign, setEditingCampaign] = useState<MarketingCampaign | null>(null)
   const [importing, setImporting] = useState(false)
 
-  const canAccess = profile ? CAN_ACCESS.includes(profile.role) : false
+  const canAccess = profile ? profile.role === 'dirigente' || (!!profile.department && CAN_ACCESS_DEPARTMENTS.includes(profile.department)) : false
 
   async function loadAll() {
     setLoading(true)

@@ -64,10 +64,20 @@ tuo profilo con ruolo `operatore` di default — correggilo subito in
 questo primo passaggio puoi invitare tutti gli altri dalla pagina "Utenti"
 del CRM).
 
+**Ruoli e reparti (dalla migrazione `0052`):** i ruoli sono solo due —
+`operatore` (dipendente) e `dirigente` (titolare: accesso pieno a tutti i
+dati e unico che può gestire gli altri utenti, dalla pagina "Utenti"). I
+permessi veri su cosa un operatore può leggere/modificare (pipeline clienti,
+richieste, ricerca&sviluppo, acquisti, ecc.) dipendono dal suo **reparto**
+(`tecnico`, `commerciale`, `operativo`, `ricerca`, `acquisti`), non più da
+una mansione nel ruolo — quindi ricordati di impostare/controllare il
+reparto di ogni collega dalla pagina "Utenti": prima era più indicativo,
+ora è il vero confine di accesso.
+
 Per ogni collega successivo, niente più Supabase: dalla pagina **Utenti**
-(visibile solo a dirigente/amministrazione) compila nome, email, ruolo e
-reparto e premi "Invita" — arriva un'email con il link di accesso, già con
-il ruolo giusto impostato. Dalla stessa pagina puoi anche:
+(visibile solo a dirigente) compila nome, email, ruolo e reparto e premi
+"Invita" — arriva un'email con il link di accesso, già con il ruolo giusto
+impostato. Dalla stessa pagina puoi anche:
 
 - **Sospendere/riattivare** una persona: blocca subito l'accesso (non può
   più entrare) senza toccare il suo storico — trattative, richieste,
@@ -78,9 +88,9 @@ il ruolo giusto impostato. Dalla stessa pagina puoi anche:
   (il campo proprietario/assegnatario/autore resta vuoto). Se invece vuoi
   bloccare l'accesso MA conservare quel collegamento, usa "Sospendi".
 - **Scegliere quali pagine del menu vede**, persona per persona, spuntandole
-  — indipendentemente dal ruolo. Attenzione: questo decide solo cosa si
+  — indipendentemente dal reparto. Attenzione: questo decide solo cosa si
   *vede* nel sito (menu e apertura delle pagine); i permessi veri su cosa si
-  può leggere/modificare restano decisi dal ruolo, come sempre.
+  può leggere/modificare restano decisi dal reparto, come sempre.
 
 Tutto questo richiede di creare la Edge Function "manage-users" (vedi
 sezione 6 qui sotto) e di eseguire la migrazione `0047` — finché non sono
@@ -108,6 +118,13 @@ database.
    - `supabase/migrations/0050_eliminazione_utenti_storico.sql` (fa sì che
      eliminare un account funzioni sempre, anche con storico collegato —
      prima il database rifiutava la cancellazione in quel caso).
+   - `supabase/migrations/0051_richieste_inviate_ricevute.sql` (aggiunge
+     `created_by` a `requests`, per poter dividere la pagina Richieste in
+     "Inviate"/"Ricevute").
+   - `supabase/migrations/0052_semplifica_ruoli.sql` (riduce i ruoli a
+     `operatore`/`dirigente` e sposta i permessi veri sui dati dal ruolo al
+     reparto — vedi il paragrafo "Ruoli e reparti" al passo 5 qui sopra;
+     dopo averla eseguita controlla/imposta il reparto di ogni collega).
    Se non li hai già eseguiti con `supabase db push` o incollandoli a mano.
 2. Supabase → **Edge Functions** → **Deploy a new function** → **Via
    Editor** → nome esatto `manage-users`.

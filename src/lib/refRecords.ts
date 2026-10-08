@@ -1,5 +1,5 @@
 import { supabase } from './supabaseClient'
-import type { ProcurementActivityDetails, UserRole } from './types'
+import type { ProcurementActivityDetails, RequestDepartment } from './types'
 
 // Collega una Richiesta a un record di un altro modulo (trattativa, cliente,
 // progetto, ricerca, fornitore, richiesta d'acquisto) — stesso principio già
@@ -32,17 +32,19 @@ export const REQUEST_REF_TABLES: RequestRefTable[] = [
   'procurement_activities',
 ]
 
-// Quali ruoli hanno effettivamente accesso al modulo — usato per non mostrare
-// nel selettore un tipo di record che risulterebbe comunque vuoto per chi sta
-// scrivendo (la RLS del database lo impedirebbe comunque, questo è solo per
-// non confondere in interfaccia).
-export const REQUEST_REF_ROLES: Record<RequestRefTable, UserRole[]> = {
-  deals: ['tecnico', 'commerciale', 'dirigente', 'amministrazione'],
-  clients: ['tecnico', 'commerciale', 'dirigente', 'amministrazione'],
-  research_records: ['dottore_laboratorio', 'dirigente', 'amministrazione'],
-  suppliers: ['ufficio_acquisti', 'dirigente', 'amministrazione'],
-  purchase_requests: ['ufficio_acquisti', 'dirigente', 'amministrazione'],
-  procurement_activities: ['ufficio_acquisti', 'dirigente', 'amministrazione'],
+// Quali reparti hanno effettivamente accesso al modulo — usato per non
+// mostrare nel selettore un tipo di record che risulterebbe comunque vuoto
+// per chi sta scrivendo (la RLS del database lo impedirebbe comunque,
+// questo è solo per non confondere in interfaccia). Un dirigente vede
+// sempre tutto (controllato a parte da chi usa questa mappa — vedi
+// RefPicker.tsx) — non serve elencarlo qui.
+export const REQUEST_REF_DEPARTMENTS: Record<RequestRefTable, RequestDepartment[]> = {
+  deals: ['tecnico', 'commerciale'],
+  clients: ['tecnico', 'commerciale'],
+  research_records: ['ricerca'],
+  suppliers: ['acquisti'],
+  purchase_requests: ['acquisti'],
+  procurement_activities: ['acquisti'],
 }
 
 export function refLinkPath(refTable: string, refId: string): string {

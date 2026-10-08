@@ -11,7 +11,9 @@ import { PURCHASE_STATUS_LABELS, type PurchaseRequest, type Supplier } from '../
 // cronologia delle richieste d'acquisto collegate, tag e commenti condivisi.
 // Visibile solo a "ufficio_acquisti" e "dirigente" — vedi
 // supabase/migrations/0013_moduli_ruoli.sql e 0014_pipeline_acquisti.sql.
-const CAN_ACCESS = ['ufficio_acquisti', 'dirigente', 'amministrazione']
+// Semplificazione ruoli, ott 2026: dipendeva dal ruolo 'ufficio_acquisti',
+// ora dal reparto 'acquisti'.
+const CAN_ACCESS_DEPARTMENTS = ['acquisti']
 const currency = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 
 export function Suppliers() {
@@ -27,7 +29,7 @@ export function Suppliers() {
   const [requestsLoading, setRequestsLoading] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  const canAccess = profile ? CAN_ACCESS.includes(profile.role) : false
+  const canAccess = profile ? profile.role === 'dirigente' || (!!profile.department && CAN_ACCESS_DEPARTMENTS.includes(profile.department)) : false
 
   async function loadSuppliers() {
     setLoading(true)

@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useAuth } from '../context/AuthContext'
 import {
+  REQUEST_REF_DEPARTMENTS,
   REQUEST_REF_LABELS,
-  REQUEST_REF_ROLES,
   REQUEST_REF_TABLES,
   fetchRefOptions,
   type RefOption,
@@ -29,7 +29,9 @@ export function RefPicker({
   const [options, setOptions] = useState<RefOption[]>([])
   const [loading, setLoading] = useState(false)
 
-  const availableTables = REQUEST_REF_TABLES.filter((t) => profile && REQUEST_REF_ROLES[t].includes(profile.role))
+  const availableTables = REQUEST_REF_TABLES.filter(
+    (t) => profile && (profile.role === 'dirigente' || (profile.department && REQUEST_REF_DEPARTMENTS[t].includes(profile.department))),
+  )
 
   useEffect(() => {
     if (!table) {

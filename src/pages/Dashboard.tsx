@@ -29,20 +29,26 @@ export function Dashboard() {
   const [todayAppointments, setTodayAppointments] = useState<Appointment[]>([])
   const [activity, setActivity] = useState<ActivityLogEntry[]>([])
 
-  const canSeePipeline = profile ? ['tecnico', 'commerciale', 'dirigente'].includes(profile.role) : false
+  // Fino a ott 2026 questi dipendevano dal ruolo specifico (tecnico/
+  // commerciale/ufficio_acquisti/dottore_laboratorio); semplificando i
+  // ruoli a operatore/dirigente, lo stesso "chi vede cosa" ora dipende dal
+  // reparto (vedi anche Layout.tsx, NAV).
+  const canSeePipeline =
+    profile?.role === 'dirigente' || (!!profile?.department && ['tecnico', 'commerciale'].includes(profile.department))
   // L'ufficio acquisti non vede la pipeline trattative (non è di sua
   // competenza), ma vede comunque il calendario appuntamenti — vedi anche
   // Calendar.tsx, canSeeAppointments.
-  const canSeeAppointments = canSeePipeline || profile?.role === 'ufficio_acquisti'
+  const canSeeAppointments = canSeePipeline || profile?.department === 'acquisti'
   // La casella "Trattative aperte" non riguarda l'ufficio acquisti (segue
   // le richieste/attività fornitore, non le trattative clienti) — su
-  // richiesta di Andrea sparisce dalla sua dashboard.
-  const showDealsTile = profile?.role !== 'ufficio_acquisti'
+  // richiesta di Andrea sparisce dalla sua dashboard. Un dirigente la vede
+  // comunque sempre, indipendentemente dal proprio reparto.
+  const showDealsTile = profile?.role === 'dirigente' || profile?.department !== 'acquisti'
   // Ricerca&Sviluppo per il momento non ha la pagina Richieste in menu (vedi
   // Layout.tsx) — niente casella/avviso "Richieste" qui, altrimenti
   // porterebbero a una pagina non più raggiungibile (richiesta di Andrea,
-  // set 2026).
-  const showRequestsTile = profile?.role !== 'dottore_laboratorio'
+  // set 2026). Un dirigente la vede comunque sempre.
+  const showRequestsTile = profile?.role === 'dirigente' || profile?.department !== 'ricerca'
 
   useEffect(() => {
     // Il conteggio rispecchia solo ciò che la RLS permette di vedere al ruolo

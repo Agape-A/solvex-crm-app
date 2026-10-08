@@ -2,38 +2,29 @@
 // mano è accettabile per un progetto piccolo; su un team più grande conviene
 // generarli con `supabase gen types typescript`.
 
-export type UserRole =
-  | 'operatore'
-  | 'tecnico'
-  | 'commerciale'
-  | 'dirigente'
-  | 'dottore_laboratorio'
-  | 'ufficio_acquisti'
-  | 'amministrazione'
+// Semplificato da 7 a 2 valori (richiesta di Andrea, ott 2026: "avendo
+// inserito il reparto, e la policy personalizzata per utente, è inutile
+// avere una caratterizzazione della mansione"). I permessi reali che prima
+// dipendevano dal ruolo specifico (tecnico, commerciale, dottore_laboratorio,
+// ufficio_acquisti) ora dipendono dal "department" della persona — vedi
+// 0052_semplifica_ruoli.sql, current_department() lato database, e i
+// controlli per reparto in ciascuna pagina (Layout.tsx, Pipeline.tsx,
+// Clients.tsx, Research.tsx, Suppliers.tsx, PurchasePipeline.tsx, ecc.).
+// "operatore" = dipendente, "dirigente" = titolare (accesso pieno a tutto,
+// compresa la gestione utenti — vedi hasFullAccess).
+export type UserRole = 'operatore' | 'dirigente'
 export const ROLE_LABELS: Record<UserRole, string> = {
   operatore: 'Operatore',
-  tecnico: 'Tecnico',
-  commerciale: 'Commerciale',
   dirigente: 'Dirigente',
-  dottore_laboratorio: 'Ricerca&Sviluppo',
-  ufficio_acquisti: 'Ufficio acquisti',
-  amministrazione: 'Amministrazione',
 }
-export const ALL_ROLES: UserRole[] = [
-  'operatore',
-  'tecnico',
-  'commerciale',
-  'dirigente',
-  'dottore_laboratorio',
-  'ufficio_acquisti',
-  'amministrazione',
-]
+export const ALL_ROLES: UserRole[] = ['operatore', 'dirigente']
 
-// "dirigente" e "amministrazione" vedono sempre tutto — usato dal menu
-// laterale (Layout.tsx, voci senza "roles" o con "amministrazione" tra i
-// roles ammessi) e da Pipeline.tsx per i permessi di modifica/assegnazione.
+// "dirigente" vede sempre tutto — usato dal menu laterale (Layout.tsx) e da
+// varie pagine per i permessi di modifica/assegnazione che un tempo
+// dipendevano anche dal vecchio ruolo "amministrazione" (confluito in
+// "dirigente" con la semplificazione dei ruoli, ott 2026).
 export function hasFullAccess(role: UserRole | undefined): boolean {
-  return role === 'dirigente' || role === 'amministrazione'
+  return role === 'dirigente'
 }
 export type DealStage = 'lead' | 'qualificato' | 'proposta' | 'trattativa' | 'vinto' | 'perso'
 

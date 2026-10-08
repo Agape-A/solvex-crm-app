@@ -31,7 +31,9 @@ import {
   type Urgenza,
 } from '../lib/types'
 
-const CAN_CREATE_DELETE: string[] = ['commerciale', 'dirigente', 'amministrazione']
+// Semplificazione ruoli, ott 2026: dipendeva dal ruolo 'commerciale',
+// ora dal reparto 'commerciale' (più il bypass dirigente ovunque usato qui sotto).
+const CAN_CREATE_DELETE_DEPARTMENTS: string[] = ['commerciale']
 
 const currency = new Intl.NumberFormat('it-IT', {
   style: 'currency',
@@ -171,13 +173,15 @@ export function Pipeline() {
   // (0044_proposta_inviata.sql) — vedi updateStage/confirmProposal più sotto.
   const [proposalModalDeal, setProposalModalDeal] = useState<Deal | null>(null)
 
-  const canCreate = profile ? CAN_CREATE_DELETE.includes(profile.role) : false
+  const canCreate = profile
+    ? profile.role === 'dirigente' || (!!profile.department && CAN_CREATE_DELETE_DEPARTMENTS.includes(profile.department))
+    : false
   // Il tecnico vede solo le trattative con "Richiede validazione tecnica"
   // attivo (0038_proprietario_clienti_e_validazione_tecnica.sql) e, per via
   // del trigger nel database, può salvare solo modifiche al campo "note":
   // niente trascinamento, niente cambio fase o proprietario — il vero
   // controllo resta comunque lato server (0003_triggers.sql).
-  const canEditFields = profile?.role === 'commerciale' || profile?.role === 'dirigente' || profile?.role === 'amministrazione'
+  const canEditFields = profile?.role === 'dirigente' || profile?.department === 'commerciale'
   // "Utente" (ex "Proprietario") è sempre e solo chi crea la trattativa —
   // nessuno può più cambiarlo a mano, nemmeno dirigente/amministrazione
   // (richiesta di Andrea, ott 2026): niente più menu di riassegnazione da
@@ -291,7 +295,7 @@ export function Pipeline() {
   const ownerOptions = useMemo(
     () =>
       profiles
-        .filter((p) => p.role === 'commerciale' || p.role === 'dirigente' || p.role === 'amministrazione')
+        .filter((p) => p.department === 'commerciale' || p.role === 'dirigente')
         .sort((a, b) => a.full_name.localeCompare(b.full_name)),
     [profiles],
   )
@@ -308,11 +312,17 @@ export function Pipeline() {
 
   if (!profile) return null
 
-  if (profile.role === 'operatore') {
+  // Semplificazione ruoli, ott 2026: prima bloccava solo chi aveva lo
+  // specifico ruolo "operatore" (lasciando passare tecnico/commerciale/
+  // dirigente/amministrazione); ora che tutti i dipendenti sono
+  // "operatore", il blocco dipende dal reparto (chi è in un reparto senza
+  // reale accesso alla pipeline, via RLS, vede subito questo messaggio
+  // invece di una pagina vuota e confusa).
+  if (profile.role !== 'dirigente' && profile.department !== 'tecnico' && profile.department !== 'commerciale') {
     return (
       <div className="view">
         <h1>Pipeline clienti</h1>
-        <p className="muted">Il ruolo operatore non ha accesso alla pipeline commerciale.</p>
+        <p className="muted">Il tuo reparto non ha accesso alla pipeline commerciale.</p>
       </div>
     )
   }

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { CLIENT_TYPE_LABELS, hasFullAccess, type Client, type CommentRefTable, type Profile, type UserRole } from '../lib/types'
+import { CLIENT_TYPE_LABELS, hasFullAccess, type Client, type CommentRefTable, type Profile, type RequestDepartment } from '../lib/types'
 import { disablePush, enablePush, getPushStatus, pushSupported, type PushStatus } from '../lib/push'
 import {
   IconDashboard,
@@ -25,23 +25,23 @@ import {
   IconBell,
 } from './Icons'
 
-// "roles" facoltativo: se presente, la voce compare solo a chi ha uno di
-// quei ruoli (oltre a dirigente/amministrazione, che vedono sempre tutto —
-// vedi hasFullAccess() e il filtro più sotto). Le voci per reparto
-// rispecchiano le policy RLS impostate in
-// supabase/migrations/0013_moduli_ruoli.sql e 0031_policy_reparti.sql —
-// pagina per pagina, "chi vede cosa":
-//   operatore/tecnico/commerciale → lato clienti (Pipeline clienti,
-//     Clienti, Richieste, Marketing); tecnico e commerciale anche
-//     Calendario.
-//   dottore_laboratorio (Ricerca&Sviluppo) → per il momento solo la pagina
-//     Ricerca&Sviluppo e Calendario (solo le proprie scadenze/appuntamenti) —
-//     niente Richieste/Report per ora (richiesta di Andrea, set 2026, vedi
-//     anche 0034/0035_reparto_ricerca*.sql: il reparto "ricerca" esiste già
-//     lato dati, per quando in futuro queste pagine verranno riaperte).
-//   ufficio_acquisti → Pipeline acquisti, Fornitori, Richieste (le proprie
-//     e quelle del reparto "acquisti" — vedi 0030_richieste_calendario_acquisti.sql),
-//     Calendario (idem, solo proprio).
+// "departments" facoltativo: se presente, la voce compare solo a chi ha
+// uno di quei reparti (oltre a dirigente, che vede sempre tutto — vedi
+// hasFullAccess() e il filtro più sotto). Fino a ott 2026 questo dipendeva
+// dal ruolo specifico (tecnico/commerciale/dottore_laboratorio/
+// ufficio_acquisti); semplificando i ruoli a operatore/dirigente (richiesta
+// di Andrea: "avendo inserito il reparto... è inutile avere una
+// caratterizzazione della mansione"), lo stesso identico "chi vede cosa" è
+// ora deciso dal reparto (vedi anche 0052_semplifica_ruoli.sql lato dati):
+//   operativo/tecnico/commerciale → lato clienti (Pipeline clienti,
+//     Clienti, Richieste, Marketing, Calendario).
+//   ricerca → per il momento solo Ricerca&Sviluppo e Calendario (solo le
+//     proprie scadenze/appuntamenti) — niente Richieste/Report per ora
+//     (richiesta di Andrea, set 2026).
+//   acquisti → Pipeline acquisti, Fornitori, Richieste (le proprie e
+//     quelle del reparto "acquisti"), Calendario (idem, solo proprio).
+// "departments: []" (Utenti) = nessun reparto la sblocca di default, solo
+// un dirigente (o un override di pagina esplicito) — vedi canSeePage().
 // Dashboard e Chat restano visibili a chiunque sia autenticato.
 // "badgeKey" facoltativo: mostra il pallino rosso di notifica preso da
 // useAuth() (vedi AuthContext.tsx e 0029_notifiche_badge.sql).
@@ -55,7 +55,7 @@ export const NAV: {
   to: string
   label: string
   icon: typeof IconDashboard
-  roles?: UserRole[]
+  departments?: RequestDepartment[]
   badgeKey?: 'chat' | 'richieste'
   commentTables?: CommentRefTable[]
 }[] = [
@@ -64,14 +64,14 @@ export const NAV: {
     to: '/pipeline',
     label: 'Pipeline clienti',
     icon: IconPipeline,
-    roles: ['operatore', 'tecnico', 'commerciale'],
+    departments: ['operativo', 'tecnico', 'commerciale'],
     commentTables: ['deals'],
   },
   {
     to: '/clienti',
     label: 'Clienti',
     icon: IconClients,
-    roles: ['operatore', 'tecnico', 'commerciale'],
+    departments: ['operativo', 'tecnico', 'commerciale'],
     commentTables: ['clients'],
   },
   {
@@ -79,40 +79,40 @@ export const NAV: {
     label: 'Richieste',
     icon: IconRequests,
     badgeKey: 'richieste',
-    roles: ['operatore', 'tecnico', 'commerciale', 'ufficio_acquisti'],
+    departments: ['operativo', 'tecnico', 'commerciale', 'acquisti'],
     commentTables: ['requests'],
   },
   {
     to: '/ricerche',
     label: 'Ricerca&Sviluppo',
     icon: IconResearch,
-    roles: ['dottore_laboratorio'],
+    departments: ['ricerca'],
     commentTables: ['research_records'],
   },
   {
     to: '/fornitori',
     label: 'Fornitori',
     icon: IconSuppliers,
-    roles: ['ufficio_acquisti'],
+    departments: ['acquisti'],
     commentTables: ['suppliers'],
   },
-  { to: '/acquisti', label: 'Pipeline acquisti', icon: IconPipeline, roles: ['ufficio_acquisti'] },
+  { to: '/acquisti', label: 'Pipeline acquisti', icon: IconPipeline, departments: ['acquisti'] },
   {
     to: '/calendario',
     label: 'Calendario',
     icon: IconCalendar,
-    roles: ['operatore', 'tecnico', 'commerciale', 'dottore_laboratorio', 'ufficio_acquisti'],
+    departments: ['operativo', 'tecnico', 'commerciale', 'ricerca', 'acquisti'],
     commentTables: ['appointments'],
   },
-  { to: '/marketing', label: 'Marketing', icon: IconMarketing, roles: ['operatore', 'tecnico', 'commerciale'] },
+  { to: '/marketing', label: 'Marketing', icon: IconMarketing, departments: ['operativo', 'tecnico', 'commerciale'] },
   {
     to: '/report',
     label: 'Report e analytics',
     icon: IconReport,
-    roles: ['operatore', 'tecnico', 'commerciale', 'ufficio_acquisti'],
+    departments: ['operativo', 'tecnico', 'commerciale', 'acquisti'],
   },
   { to: '/chat', label: 'Chat', icon: IconChat, badgeKey: 'chat' },
-  { to: '/utenti', label: 'Utenti', icon: IconUsers, roles: ['dirigente', 'amministrazione'] },
+  { to: '/utenti', label: 'Utenti', icon: IconUsers, departments: [] },
 ]
 
 // Usata sia per nascondere le voci di menu qui sotto sia per bloccare
@@ -127,15 +127,15 @@ export const NAV: {
 // può leggere/modificare restano decisi dal ruolo tramite le regole di
 // sicurezza del database (RLS), esattamente come prima di questa funzione.
 export function canSeePage(to: string, profile: Profile | null | undefined): boolean {
-  // Dirigente e amministrazione vedono sempre tutto, invariante di sempre
-  // in questo progetto (vedi hasFullAccess) — un override per pagine non
-  // li restringe mai, per non rischiare che si chiudano fuori da soli da
-  // "Utenti" per una spunta sbagliata.
+  // Dirigente vede sempre tutto, invariante di sempre in questo progetto
+  // (vedi hasFullAccess) — un override per pagine non lo restringe mai, per
+  // non rischiare che si chiuda fuori da solo da "Utenti" per una spunta
+  // sbagliata.
   if (hasFullAccess(profile?.role)) return true
   const item = NAV.find((n) => n.to === to)
-  if (!item || !item.roles) return true
+  if (!item || !item.departments) return true
   if (profile?.page_overrides) return profile.page_overrides.includes(to)
-  return item.roles.includes(profile?.role as UserRole)
+  return !!profile?.department && item.departments.includes(profile.department)
 }
 
 const SIDEBAR_COLLAPSED_KEY = 'solvex-sidebar-collapsed'

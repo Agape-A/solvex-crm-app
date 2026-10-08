@@ -15,7 +15,9 @@ import {
 
 // Pagina visibile solo a "dottore_laboratorio" e "dirigente" — vedi
 // supabase/migrations/0013_moduli_ruoli.sql per le policy RLS gemelle.
-const CAN_ACCESS = ['dottore_laboratorio', 'dirigente', 'amministrazione']
+// Semplificazione ruoli, ott 2026: dipendeva dal ruolo 'dottore_laboratorio',
+// ora dal reparto 'ricerca'.
+const CAN_ACCESS_DEPARTMENTS = ['ricerca']
 const STATUSES = Object.keys(RESEARCH_STATUS_LABELS) as ResearchStatus[]
 
 export function Research() {
@@ -28,14 +30,14 @@ export function Research() {
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
 
-  const canAccess = profile ? CAN_ACCESS.includes(profile.role) : false
+  const canAccess = profile ? profile.role === 'dirigente' || (!!profile.department && CAN_ACCESS_DEPARTMENTS.includes(profile.department)) : false
   // Un laboratorista può assegnare una scheda solo a se stesso (la RLS lo
   // impone: "owner_id = auth.uid() or owner_id is null" — vedi
-  // 0039_schede_ricerca_per_responsabile.sql); solo dirigente/
-  // amministrazione possono riassegnarla a un collega.
-  const isDirigente = profile?.role === 'dirigente' || profile?.role === 'amministrazione'
+  // 0039_schede_ricerca_per_responsabile.sql); solo un dirigente può
+  // riassegnarla a un collega.
+  const isDirigente = profile?.role === 'dirigente'
   const ownerOptions = profiles
-    .filter((p) => p.role === 'dottore_laboratorio' || p.role === 'dirigente' || p.role === 'amministrazione')
+    .filter((p) => p.department === 'ricerca' || p.role === 'dirigente')
     .sort((a, b) => a.full_name.localeCompare(b.full_name))
 
   function clientFor(record: ResearchRecord) {

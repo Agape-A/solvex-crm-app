@@ -40,9 +40,9 @@ alter table public.chat_messages drop constraint if exists chat_messages_author_
 alter table public.chat_messages add constraint chat_messages_author_id_fkey
   foreign key (author_id) references public.profiles(id) on delete set null;
 
-alter table public.development_projects drop constraint if exists development_projects_owner_id_fkey;
-alter table public.development_projects add constraint development_projects_owner_id_fkey
-  foreign key (owner_id) references public.profiles(id) on delete set null;
+-- (development_projects non esiste più — tabella eliminata in
+-- 0023_elimina_sviluppo_progetto.sql; se fosse ancora qui "alter table"
+-- fallirebbe con "relation does not exist" e fermerebbe l'intero script.)
 
 alter table public.research_records drop constraint if exists research_records_owner_id_fkey;
 alter table public.research_records add constraint research_records_owner_id_fkey

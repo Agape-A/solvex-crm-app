@@ -29,16 +29,10 @@ const SERVICE_ROLE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
 
 // Tenuti allineati a mano con l'enum Postgres (user_role / request_department,
 // vedi supabase/migrations) e con src/lib/types.ts — stesso approccio già
-// usato nel resto del progetto per i tipi lato client.
-const ALLOWED_ROLES = [
-  'operatore',
-  'tecnico',
-  'commerciale',
-  'dirigente',
-  'dottore_laboratorio',
-  'ufficio_acquisti',
-  'amministrazione',
-]
+// usato nel resto del progetto per i tipi lato client. Semplificato da 7 a
+// 2 valori (0052_semplifica_ruoli.sql, richiesta di Andrea, ott 2026): i
+// permessi reali per modulo dipendono ora dal reparto, non più dal ruolo.
+const ALLOWED_ROLES = ['operatore', 'dirigente']
 const ALLOWED_DEPARTMENTS = ['commerciale', 'tecnico', 'operativo', 'amministrazione', 'acquisti', 'ricerca']
 
 const corsHeaders = {
@@ -91,7 +85,7 @@ Deno.serve(async (req) => {
 
   const { data: callerProfile } = await admin.from('profiles').select('role').eq('id', callerData.user.id).single()
 
-  if (!callerProfile || !['dirigente', 'amministrazione'].includes(callerProfile.role)) {
+  if (!callerProfile || callerProfile.role !== 'dirigente') {
     return jsonResponse({ error: 'Solo la direzione può gestire gli utenti.' }, 403)
   }
 

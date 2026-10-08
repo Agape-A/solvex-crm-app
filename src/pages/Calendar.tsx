@@ -75,9 +75,13 @@ export function Calendar() {
   const [selectedDay, setSelectedDay] = useState<Date | null>(null)
   const [openAppointmentId, setOpenAppointmentId] = useState<string | null>(null)
 
-  const canSeeAppointments = profile ? ['tecnico', 'commerciale', 'dirigente', 'ufficio_acquisti'].includes(profile.role) : false
+  // Semplificazione ruoli, ott 2026: questi due dipendevano dal ruolo
+  // specifico (tecnico/commerciale/ufficio_acquisti), ora dal reparto.
+  const canSeeAppointments =
+    profile?.role === 'dirigente' ||
+    (!!profile?.department && ['tecnico', 'commerciale', 'acquisti'].includes(profile.department))
   const canCreateAppointment =
-    profile?.role === 'commerciale' || profile?.role === 'dirigente' || profile?.role === 'ufficio_acquisti'
+    profile?.role === 'dirigente' || profile?.department === 'commerciale' || profile?.department === 'acquisti'
 
   async function loadAll() {
     setLoading(true)

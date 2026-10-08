@@ -104,14 +104,17 @@ function InviteForm({ onInvited }: { onInvited: () => void }) {
   )
 }
 
-// Pagine spuntabili: solo quelle con un ruolo associato in NAV — Dashboard
+// Pagine spuntabili: solo quelle con un reparto associato in NAV — Dashboard
 // e Chat sono sempre visibili per tutti e non si spuntano.
-const RESTRICTABLE_PAGES = NAV.filter((item) => item.roles)
+const RESTRICTABLE_PAGES = NAV.filter((item) => item.departments)
 
 function PageAccessEditor({ user, onSave }: { user: Profile; onSave: (pageOverrides: string[] | null) => Promise<void> }) {
   const [custom, setCustom] = useState(user.page_overrides !== null)
   const [selected, setSelected] = useState<string[]>(
-    user.page_overrides ?? RESTRICTABLE_PAGES.filter((item) => item.roles!.includes(user.role)).map((item) => item.to),
+    user.page_overrides ??
+      RESTRICTABLE_PAGES.filter((item) => !!user.department && item.departments!.includes(user.department)).map(
+        (item) => item.to,
+      ),
   )
   const [saving, setSaving] = useState(false)
 

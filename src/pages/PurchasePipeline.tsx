@@ -44,7 +44,9 @@ import {
 // via Supabase, ma "+ Nuova richiesta" da oggi crea solo attività con la
 // bacheca per stato qui sotto. Pagina visibile solo a "ufficio_acquisti" e
 // "dirigente" — vedi 0013_moduli_ruoli.sql.
-const CAN_ACCESS = ['ufficio_acquisti', 'dirigente']
+// Semplificazione ruoli, ott 2026: dipendeva dal ruolo 'ufficio_acquisti',
+// ora dal reparto 'acquisti'.
+const CAN_ACCESS_DEPARTMENTS = ['acquisti']
 
 function isOverdue(dateStr: string): boolean {
   return new Date(dateStr) < new Date(new Date().toDateString())
@@ -82,7 +84,7 @@ export function PurchasePipeline() {
   // sempre (anche su desktop).
   const [statusFilter, setStatusFilter] = useState<RequestStatus | 'all'>('all')
 
-  const canAccess = profile ? CAN_ACCESS.includes(profile.role) : false
+  const canAccess = profile ? profile.role === 'dirigente' || (!!profile.department && CAN_ACCESS_DEPARTMENTS.includes(profile.department)) : false
 
   async function loadSuppliers() {
     const { data, error } = await supabase.from('suppliers').select('*').order('name')

@@ -22,7 +22,9 @@ import {
 } from '../lib/types'
 
 const TYPE_FILTERS: (ClientType | 'tutti')[] = ['tutti', 'conceria', 'distributore', 'azienda_chimica']
-const CAN_WRITE: string[] = ['commerciale', 'dirigente']
+// Semplificazione ruoli, ott 2026: dipendeva dal ruolo 'commerciale',
+// ora dal reparto 'commerciale' (più il bypass dirigente, qui sotto).
+const CAN_WRITE_DEPARTMENTS: string[] = ['commerciale']
 const currency = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 
 export function Clients() {
@@ -43,8 +45,11 @@ export function Clients() {
   const [dealsLoading, setDealsLoading] = useState(false)
   const [deleting, setDeleting] = useState(false)
 
-  const canWrite = profile ? CAN_WRITE.includes(profile.role) : false
-  const canSeeDeals = profile ? ['tecnico', 'commerciale', 'dirigente'].includes(profile.role) : false
+  const canWrite = profile
+    ? profile.role === 'dirigente' || (!!profile.department && CAN_WRITE_DEPARTMENTS.includes(profile.department))
+    : false
+  const canSeeDeals =
+    profile?.role === 'dirigente' || (!!profile?.department && ['tecnico', 'commerciale'].includes(profile.department))
   // "Utente" (ex "Proprietario") è sempre il creatore della scheda e non è
   // più modificabile da nessuno, nemmeno da dirigente/amministrazione
   // (richiesta di Andrea, ott 2026, revisione "Nuovo Contatto") — nessun
@@ -52,7 +57,7 @@ export function Clients() {
   // nella vista di sola lettura. La RLS impone comunque
   // "owner_id = auth.uid()" in insert (vedi 0040_nuovo_contatto.sql).
   const ownerOptions = profiles
-    .filter((p) => p.role === 'commerciale' || p.role === 'dirigente' || p.role === 'amministrazione')
+    .filter((p) => p.department === 'commerciale' || p.role === 'dirigente')
     .sort((a, b) => a.full_name.localeCompare(b.full_name))
   // "Responsabile cliente" (0041_responsabile_cliente.sql, richiesta di
   // Andrea, ott 2026): il tecnico assegnato a un cliente — campo separato
@@ -60,9 +65,9 @@ export function Clients() {
   // portafoglio di clienti. Assegnabile/modificabile solo da dirigente/
   // amministrazione (imposto anche lato RLS con un trigger); chiunque può
   // però filtrare la lista clienti per questo campo, qui sotto.
-  const canAssignTechResponsible = profile?.role === 'dirigente' || profile?.role === 'amministrazione'
+  const canAssignTechResponsible = profile?.role === 'dirigente'
   const techOptions = profiles
-    .filter((p) => p.role === 'tecnico')
+    .filter((p) => p.department === 'tecnico')
     .sort((a, b) => a.full_name.localeCompare(b.full_name))
 
   async function loadClients() {
@@ -172,11 +177,12 @@ export function Clients() {
 
   if (!profile) return null
 
-  if (profile.role === 'operatore') {
+  // Semplificazione ruoli, ott 2026: vedi la stessa nota in Pipeline.tsx.
+  if (profile.role !== 'dirigente' && profile.department !== 'tecnico' && profile.department !== 'commerciale') {
     return (
       <div className="view">
         <h1>Clienti</h1>
-        <p className="muted">Il ruolo operatore non ha accesso all'anagrafica clienti.</p>
+        <p className="muted">Il tuo reparto non ha accesso all'anagrafica clienti.</p>
       </div>
     )
   }
@@ -1001,7 +1007,7 @@ function ImportClientsPanel({ profile, onImported }: { profile: Profile; onImpor
   // null" — vedi 0038_proprietario_clienti_e_validazione_tecnica.sql); se
   // importa un dirigente/amministrazione, i clienti entrano "non assegnati"
   // e vanno distribuiti a mano dal dettaglio cliente.
-  const importOwnerId = profile.role === 'commerciale' ? profile.id : null
+  const importOwnerId = profile.department === 'commerciale' && profile.role !== 'dirigente' ? profile.id : null
   const [fileName, setFileName] = useState('')
   const [headers, setHeaders] = useState<string[]>([])
   const [rawRows, setRawRows] = useState<Record<string, unknown>[]>([])

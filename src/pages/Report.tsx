@@ -224,9 +224,12 @@ export function Report() {
   // stesse regole delle pagine dedicate (Pipeline, Ricerca&Sviluppo, Acquisti,
   // vedi 0013_moduli_ruoli.sql). La RLS impedirebbe comunque la lettura a chi
   // non ha il ruolo giusto: qui evitiamo solo la query inutile.
-  const canSeeCommerciale = profile ? ['tecnico', 'commerciale', 'dirigente'].includes(profile.role) : false
-  const canSeeResearch = profile ? ['dottore_laboratorio', 'dirigente'].includes(profile.role) : false
-  const canSeeAcquisti = profile ? ['ufficio_acquisti', 'dirigente'].includes(profile.role) : false
+  // Semplificazione ruoli, ott 2026: dipendeva dal ruolo specifico, ora dal
+  // reparto (più il bypass dirigente, che vede sempre tutto).
+  const canSeeCommerciale =
+    profile?.role === 'dirigente' || (!!profile?.department && ['tecnico', 'commerciale'].includes(profile.department))
+  const canSeeResearch = profile?.role === 'dirigente' || profile?.department === 'ricerca'
+  const canSeeAcquisti = profile?.role === 'dirigente' || profile?.department === 'acquisti'
   const isDirigente = profile?.role === 'dirigente'
 
   async function reloadTargets() {
@@ -592,7 +595,7 @@ export function Report() {
             {/* Dati già filtrati dalla RLS (0038_proprietario_clienti_e_validazione_tecnica.sql):
                 qui solo le proprie trattative/clienti per il tecnico, quindi
                 l'intestazione non deve più dire "Commerciale" per lui. */}
-            <h2>{profile?.role === 'tecnico' ? 'Validazioni tecniche' : 'Commerciale'}</h2>
+            <h2>{profile?.department === 'tecnico' && profile?.role !== 'dirigente' ? 'Validazioni tecniche' : 'Commerciale'}</h2>
           </div>
           <div className="tile-row tile-row-3">
             <div className="card tile">
