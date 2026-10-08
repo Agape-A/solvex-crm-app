@@ -72,9 +72,11 @@ il ruolo giusto impostato. Dalla stessa pagina puoi anche:
 - **Sospendere/riattivare** una persona: blocca subito l'accesso (non può
   più entrare) senza toccare il suo storico — trattative, richieste,
   commenti restano. È la via consigliata per chi lascia l'azienda.
-- **Eliminare per sempre** un account — solo se non ha ancora nessun dato
-  collegato (nessuna trattativa, richiesta, commento...): altrimenti il
-  pulsante risponde con un messaggio che lo spiega e suggerisce "Sospendi".
+- **Eliminare per sempre** un account — sempre, anche se la persona ha
+  ancora trattative, richieste, commenti o altro storico collegato: quelle
+  righe restano nel CRM, solo senza più il nome della persona eliminata
+  (il campo proprietario/assegnatario/autore resta vuoto). Se invece vuoi
+  bloccare l'accesso MA conservare quel collegamento, usa "Sospendi".
 - **Scegliere quali pagine del menu vede**, persona per persona, spuntandole
   — indipendentemente dal ruolo. Attenzione: questo decide solo cosa si
   *vede* nel sito (menu e apertura delle pagine); i permessi veri su cosa si
@@ -102,7 +104,10 @@ database.
      pagine, senza dover ricaricare);
    - `supabase/migrations/0049_sospensione_blocca_rls.sql` (fa sì che una
      sospensione blocchi SUBITO anche i dati, non solo il prossimo accesso —
-     vedi i commenti nel file per il perché).
+     vedi i commenti nel file per il perché);
+   - `supabase/migrations/0050_eliminazione_utenti_storico.sql` (fa sì che
+     eliminare un account funzioni sempre, anche con storico collegato —
+     prima il database rifiutava la cancellazione in quel caso).
    Se non li hai già eseguiti con `supabase db push` o incollandoli a mano.
 2. Supabase → **Edge Functions** → **Deploy a new function** → **Via
    Editor** → nome esatto `manage-users`.

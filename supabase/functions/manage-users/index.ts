@@ -41,30 +41,6 @@ const ALLOWED_ROLES = [
 ]
 const ALLOWED_DEPARTMENTS = ['commerciale', 'tecnico', 'operativo', 'amministrazione', 'acquisti', 'ricerca']
 
-// Tabelle che possono contenere lo storico di una persona (trattative,
-// richieste, appuntamenti, commenti, attività...). Quasi tutte queste
-// colonne non hanno "on delete cascade" verso profiles: se anche una sola
-// riga referenzia ancora l'account, eliminarlo per sempre fallirebbe a
-// metà con un errore del database poco comprensibile — qui lo
-// controlliamo PRIMA e rispondiamo con un messaggio chiaro, suggerendo
-// "Sospendi" invece (che non tocca nessuno storico).
-const HISTORY_CHECKS: { table: string; column: string }[] = [
-  { table: 'deals', column: 'owner_id' },
-  { table: 'clients', column: 'owner_id' },
-  { table: 'clients', column: 'tech_responsible_id' },
-  { table: 'requests', column: 'assignee_id' },
-  { table: 'appointments', column: 'assignee_id' },
-  { table: 'activity_log', column: 'actor_id' },
-  { table: 'record_comments', column: 'author_id' },
-  { table: 'chat_messages', column: 'author_id' },
-  { table: 'supplier_activities', column: 'created_by' },
-  { table: 'procurement_activities', column: 'created_by' },
-  { table: 'annual_targets', column: 'user_id' },
-  { table: 'development_projects', column: 'owner_id' },
-  { table: 'research_records', column: 'owner_id' },
-  { table: 'purchase_requests', column: 'requested_by' },
-]
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -205,18 +181,13 @@ Deno.serve(async (req) => {
 
   // ============ ELIMINA ============
   if (action === 'delete') {
-    for (const { table, column } of HISTORY_CHECKS) {
-      const { count, error: countError } = await admin.from(table).select('id', { count: 'exact', head: true }).eq(column, userId)
-      if (!countError && (count ?? 0) > 0) {
-        return jsonResponse(
-          {
-            error: `Questa persona ha ancora dati collegati (${table}): eliminarla per sempre cancellerebbe anche quelli, o l'operazione fallirebbe a metà. Usa "Sospendi" invece — blocca l'accesso senza toccare lo storico.`,
-          },
-          409,
-        )
-      }
-    }
-
+    // Fino alla migrazione 0050 qui controllavamo prima se la persona
+    // aveva ancora storico collegato (trattative, richieste, commenti...)
+    // e rifiutavamo di eliminarla per non rompere il database a metà.
+    // Da 0050 quelle colonne diventano vuote da sole quando l'account
+    // viene eliminato (ON DELETE SET NULL) — lo storico resta, solo senza
+    // più il collegamento alla persona — quindi l'eliminazione può essere
+    // sempre immediata, come richiesto.
     const { error: deleteError } = await admin.auth.admin.deleteUser(userId)
     if (deleteError) {
       return jsonResponse({ error: deleteError.message }, 500)
