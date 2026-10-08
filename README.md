@@ -94,10 +94,16 @@ segreti da impostare, e **la verifica JWT va lasciata ATTIVA** (il contrario
 di push-send) perché qui a chiamare è il browser di chi è loggato, non il
 database.
 
-1. Esegui la migrazione `supabase/migrations/0047_sospensione_pagine_utenti.sql`
-   dalla SQL Editor di Supabase (aggiunge le colonne `active` e
-   `page_overrides` a `profiles`), se non l'hai già fatto con `supabase db push`
-   o incollandola a mano.
+1. Esegui, dalla SQL Editor di Supabase, nell'ordine:
+   - `supabase/migrations/0047_sospensione_pagine_utenti.sql` (aggiunge le
+     colonne `active` e `page_overrides` a `profiles`);
+   - `supabase/migrations/0048_realtime_profili.sql` (fa sì che chi è già
+     collegato veda subito l'effetto di una sospensione o di un cambio
+     pagine, senza dover ricaricare);
+   - `supabase/migrations/0049_sospensione_blocca_rls.sql` (fa sì che una
+     sospensione blocchi SUBITO anche i dati, non solo il prossimo accesso —
+     vedi i commenti nel file per il perché).
+   Se non li hai già eseguiti con `supabase db push` o incollandoli a mano.
 2. Supabase → **Edge Functions** → **Deploy a new function** → **Via
    Editor** → nome esatto `manage-users`.
    - Se avevi già creato una funzione chiamata `invite-user` nelle settimane
@@ -112,6 +118,15 @@ database.
    email (o un collega) e verifica che arrivi l'email di invito; prova poi
    "Sospendi" su un account di prova e verifica che non riesca più ad
    accedere.
+
+**Importante — a differenza del resto del sito (che si aggiorna da solo a
+ogni `git push`), questa funzione va rincollata a mano nel pannello Supabase
+ogni volta che il suo codice cambia** (`supabase/functions/manage-users/index.ts`):
+un `git push` da solo NON aggiorna quello che gira davvero su Supabase. Se
+dopo un aggiornamento di questo file "Sospendi"/"Elimina" sembrano non avere
+alcun effetto (nessun errore, ma nessun cambiamento), la causa più comune è
+proprio questa: il pannello Supabase sta ancora eseguendo la versione
+precedente — ripeti il passo 3 qui sopra.
 
 ## 7. Notifiche push (opzionale)
 

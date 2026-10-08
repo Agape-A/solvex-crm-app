@@ -189,7 +189,17 @@ Deno.serve(async (req) => {
     if (banError) {
       return jsonResponse({ error: banError.message }, 500)
     }
-    await admin.from('profiles').update({ active: action === 'reactivate' }).eq('id', userId)
+    // Bug corretto (ott 2026): questo aggiornamento non controllava il suo
+    // stesso errore — se falliva, la funzione rispondeva comunque "ok" e la
+    // persona non risultava sospesa da nessuna parte (né qui, né altrove),
+    // senza alcun messaggio. Ora un eventuale errore torna visibile.
+    const { error: profileError } = await admin
+      .from('profiles')
+      .update({ active: action === 'reactivate' })
+      .eq('id', userId)
+    if (profileError) {
+      return jsonResponse({ error: profileError.message }, 500)
+    }
     return jsonResponse({ ok: true })
   }
 
