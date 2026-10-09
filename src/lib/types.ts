@@ -774,6 +774,33 @@ export interface ChatMessage {
   channel: ChatChannel
   ref_table: string | null
   ref_id: string | null
+  // Messaggio privato 1-a-1 (0053_chat_privata_e_commenti.sql, richiesta di
+  // Andrea ott 2026: "la chat con tutti gli utenti, dopodiché per ogni
+  // utente e per reparto") — quando è impostato, channel è sempre 'dm' e
+  // SOLO autore e destinatario possono leggerlo (nemmeno un dirigente,
+  // confermato da Andrea): vedi la policy "chat_messages_select".
+  recipient_id: string | null
+}
+
+// Elemento unificato della cronologia di una conversazione in Chat: un
+// messaggio scritto lì (chat_messages) oppure un commento con destinatario
+// scritto in una scheda di richiesta/trattativa/cliente/ecc. (record_comments,
+// 0043_notifiche_commenti.sql) che ora compare anche qui — stessa richiesta
+// di Andrea di cui sopra: "dove al suo interno vanno a finire anche tutti i
+// commenti di richieste e leeds". Un'unica forma per poterli ordinare e
+// mostrare insieme in Chat.tsx; "source" dice da quale tabella viene, per
+// sapere dove scrivere una risposta (una risposta a un commento resta un
+// commento sullo stesso record, non diventa un messaggio generico).
+export interface ChatFeedItem {
+  id: string
+  source: 'message' | 'comment'
+  author_id: string | null
+  body: string
+  created_at: string
+  ref_table: string | null
+  ref_id: string | null
+  recipient_id: string | null
+  recipient_department: RequestDepartment | null
 }
 
 // ============ Obiettivi annuali (impostati dalla direzione) ============

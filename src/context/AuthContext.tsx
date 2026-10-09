@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import type { Session } from '@supabase/supabase-js'
 import { supabase } from '../lib/supabaseClient'
-import type { ChatChannel, CommentRefTable, Profile, UnreadCommentsByTable } from '../lib/types'
+import type { CommentRefTable, Profile, UnreadCommentsByTable } from '../lib/types'
 
 interface AuthState {
   session: Session | null
@@ -19,7 +19,10 @@ interface AuthState {
   signOut: () => Promise<void>
   unreadChatCount: number
   newRequestsCount: number
-  markChatSeen: (channel: ChatChannel) => Promise<void>
+  // Il parametro è una stringa, non più ChatChannel: da 0053 serve anche
+  // marcare "vista" una chat privata, con una chiave sintetica
+  // "dm:<id dell'altra persona>" (vedi Chat.tsx), non un canale vero.
+  markChatSeen: (channel: string) => Promise<void>
   // Pallino dedicato ai commenti (0043_notifiche_commenti.sql, richiesta di
   // Andrea ott 2026) — distinto da "Chat" e "Richieste": per ref_table, così
   // Layout.tsx mostra il numero giusto su ciascuna pagina (Pipeline,
@@ -167,7 +170,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // (autore nullo): questo numero significa solo "messaggi di persone non
   // ancora letti", mai richieste — quelle hanno il proprio pallino su
   // "Richieste" (richiesta di Andrea, set 2026: un significato solo per
-  // ciascun numero).
+  // ciascun numero). Da 0053_chat_privata_e_commenti.sql il conteggio (lato
+  // database) include anche i commenti con destinatario che ora compaiono
+  // dentro la Chat, quindi qui si ascoltano anche gli INSERT su
+  // record_comments, non solo su chat_messages.
 
   useEffect(() => {
     if (!profile) {
@@ -186,6 +192,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const channel = supabase
       .channel('chat_messages_badge')
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, () => refresh())
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'record_comments' }, () => refresh())
       .subscribe()
 
     return () => {
@@ -265,7 +272,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUnreadCommentsByTable(map)
   }
 
-  async function markChatSeen(channel: ChatChannel) {
+  async function markChatSeen(channel: string) {
     if (!profile) return
     const { error } = await supabase
       .from('chat_channel_reads')

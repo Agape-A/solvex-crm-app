@@ -125,6 +125,12 @@ database.
      `operatore`/`dirigente` e sposta i permessi veri sui dati dal ruolo al
      reparto — vedi il paragrafo "Ruoli e reparti" al passo 5 qui sopra;
      dopo averla eseguita controlla/imposta il reparto di ogni collega).
+   - `supabase/migrations/0053_chat_privata_e_commenti.sql` (aggiunge alla
+     pagina Chat i messaggi privati 1-a-1 con ciascun collega — SOLO i due
+     coinvolti li leggono, nemmeno un dirigente — e fa comparire lì anche i
+     commenti con destinatario scritti nelle schede di richieste/
+     trattative/clienti/ecc., come messaggi veri a cui si risponde
+     direttamente dalla chat).
    Se non li hai già eseguiti con `supabase db push` o incollandoli a mano.
 2. Supabase → **Edge Functions** → **Deploy a new function** → **Via
    Editor** → nome esatto `manage-users`.
