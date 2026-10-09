@@ -253,45 +253,41 @@ export function Chat() {
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, (payload) => {
         const row = payload.new as ChatMessage
         if (!belongsToConversation(row, 'message')) return
+        const newItem: ChatFeedItem = {
+          id: row.id,
+          source: 'message',
+          author_id: row.author_id,
+          body: row.body,
+          created_at: row.created_at,
+          ref_table: row.ref_table,
+          ref_id: row.ref_id,
+          recipient_id: row.recipient_id,
+          recipient_department: null,
+        }
         setItems((current) =>
           current.some((i) => i.id === row.id)
             ? current
-            : [
-                ...current,
-                {
-                  id: row.id,
-                  source: 'message',
-                  author_id: row.author_id,
-                  body: row.body,
-                  created_at: row.created_at,
-                  ref_table: row.ref_table,
-                  ref_id: row.ref_id,
-                  recipient_id: row.recipient_id,
-                  recipient_department: null,
-                },
-              ].sort((a, b) => a.created_at.localeCompare(b.created_at)),
+            : [...current, newItem].sort((a, b) => a.created_at.localeCompare(b.created_at)),
         )
       })
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'record_comments' }, (payload) => {
         const row = payload.new as RecordComment
         if (!belongsToConversation(row, 'comment')) return
+        const newItem: ChatFeedItem = {
+          id: row.id,
+          source: 'comment',
+          author_id: row.author_id,
+          body: row.body,
+          created_at: row.created_at,
+          ref_table: row.ref_table,
+          ref_id: row.ref_id,
+          recipient_id: row.recipient_id,
+          recipient_department: row.recipient_department,
+        }
         setItems((current) =>
           current.some((i) => i.id === row.id)
             ? current
-            : [
-                ...current,
-                {
-                  id: row.id,
-                  source: 'comment',
-                  author_id: row.author_id,
-                  body: row.body,
-                  created_at: row.created_at,
-                  ref_table: row.ref_table,
-                  ref_id: row.ref_id,
-                  recipient_id: row.recipient_id,
-                  recipient_department: row.recipient_department,
-                },
-              ].sort((a, b) => a.created_at.localeCompare(b.created_at)),
+            : [...current, newItem].sort((a, b) => a.created_at.localeCompare(b.created_at)),
         )
       })
       .subscribe()
@@ -337,7 +333,7 @@ export function Chat() {
       return
     }
 
-    const payload =
+    const payload: { author_id: string; body: string; channel: string; recipient_id: string | null } =
       conversation.kind === 'channel'
         ? { author_id: profile.id, body: body.trim(), channel: conversation.channel, recipient_id: null }
         : { author_id: profile.id, body: body.trim(), channel: 'dm', recipient_id: conversation.userId }
