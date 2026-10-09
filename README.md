@@ -131,6 +131,11 @@ database.
      commenti con destinatario scritti nelle schede di richieste/
      trattative/clienti/ecc., come messaggi veri a cui si risponde
      direttamente dalla chat).
+   - `supabase/migrations/0054_fix_pallino_commenti_pubblici.sql` (corregge
+     un bug di 0053: il pallino di "Chat" poteva restare bloccato su un
+     numero anche senza nessun pallino visibile su un canale o una chat
+     privata — causato da vecchi commenti "pubblici", senza nessun
+     destinatario, scritti prima di esistere i commenti con destinatario).
    Se non li hai già eseguiti con `supabase db push` o incollandoli a mano.
 2. Supabase → **Edge Functions** → **Deploy a new function** → **Via
    Editor** → nome esatto `manage-users`.
