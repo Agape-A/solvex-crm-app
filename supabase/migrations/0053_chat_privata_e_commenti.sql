@@ -40,9 +40,16 @@ alter table public.chat_messages add constraint chat_messages_dm_coerente_check
     or (channel <> 'dm' and recipient_id is null)
   );
 
+-- "is distinct from" tratta due NULL come NON distinti (quindi falso): gli
+-- avvisi di sistema già in tabella (autore nullo, es. nuova richiesta per un
+-- reparto — vedi 0033_chat_reparti_1.sql) hanno anche recipient_id nullo
+-- (colonna appena aggiunta, nessun dato storico), quindi "null is distinct
+-- from null" = falso e la constraint fallirebbe proprio su quelle righe —
+-- il "author_id is null or" qui sotto le esclude, serve solo per i messaggi
+-- scritti da una persona.
 alter table public.chat_messages drop constraint if exists chat_messages_no_self_dm_check;
 alter table public.chat_messages add constraint chat_messages_no_self_dm_check
-  check (recipient_id is distinct from author_id);
+  check (author_id is null or recipient_id is distinct from author_id);
 
 -- IMPORTANTE: quando recipient_id è impostato (messaggio privato), il "case"
 -- qui sotto esclude DAVVERO ogni altro accesso, bypass di dirigente incluso
