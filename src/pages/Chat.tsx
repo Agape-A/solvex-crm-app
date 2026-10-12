@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
+import { IconChevronsLeft } from '../components/Icons'
 import {
   hasFullAccess,
   REQUEST_DEPARTMENTS,
@@ -76,6 +77,17 @@ function channelKey(conv: ActiveConversation): string {
   return conv.kind === 'channel' ? conv.channel : `dm:${conv.userId}`
 }
 
+// Iniziali per l'avatar circolare nella lista delle conversazioni su
+// telefono (stile WhatsApp/Telegram, richiesta di Andrea ott 2026): due
+// lettere da nome+cognome, oppure le prime due di un nome/canale singolo
+// (es. "Generale" -> "GE").
+function initials(name: string): string {
+  const parts = name.trim().split(/\s+/).filter(Boolean)
+  if (parts.length === 0) return '?'
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase()
+  return (parts[0][0] + parts[1][0]).toUpperCase()
+}
+
 function timeLabel(iso: string): string {
   const d = new Date(iso)
   const today = new Date()
@@ -88,6 +100,12 @@ function timeLabel(iso: string): string {
 export function Chat() {
   const { profile, markChatSeen } = useAuth()
   const [conversation, setConversation] = useState<ActiveConversation>({ kind: 'channel', channel: 'generale' })
+  // Su telefono la pagina si apre sempre sulla lista di canali/persone (come
+  // WhatsApp/Telegram, richiesta di Andrea ott 2026) — questa chat si apre a
+  // schermo intero solo dopo averne scelta una, con un bottone per tornare
+  // alla lista. Su desktop questo stato non ha nessun effetto (vedi CSS):
+  // lista e chat restano sempre affiancate come prima.
+  const [mobileConversationOpen, setMobileConversationOpen] = useState(false)
   const [items, setItems] = useState<ChatFeedItem[]>([])
   const [profiles, setProfiles] = useState<Profile[]>([])
   const [authors, setAuthors] = useState<Map<string, string>>(new Map())
@@ -357,48 +375,77 @@ export function Chat() {
       <div className="view-head">
         <h1>Chat</h1>
       </div>
-      {visibleChannels.length > 1 && (
-        <div className="chat-mode-toggle">
-          {visibleChannels.map((c) => (
-            <button
-              key={c}
-              type="button"
-              className={conversation.kind === 'channel' && conversation.channel === c ? 'active' : ''}
-              onClick={() => setConversation({ kind: 'channel', channel: c })}
-            >
-              {CHAT_CHANNEL_LABELS[c]}
-              {!(conversation.kind === 'channel' && conversation.channel === c) && (unreadByConversation.get(c) ?? 0) > 0 && (
-                <span className="row-notify-dot" aria-label="Non letti" />
-              )}
-            </button>
-          ))}
+      {/* Su schermi piccoli (sotto gli 860px, vedi CSS) queste due parti
+          diventano due "schermate" separate come WhatsApp/Telegram — prima
+          la lista di canali/persone a schermo intero, poi (dopo averne
+          scelta una) la chat a schermo intero con un bottone per tornare
+          indietro. Su desktop restano semplicemente una sopra l'altra,
+          come prima di questa modifica. */}
+      <div className={'chat-layout' + (mobileConversationOpen ? ' chat-layout-detail-open' : '')}>
+        <div className="chat-list-panel">
+          {visibleChannels.length > 1 && (
+            <>
+              <p className="muted chat-section-label">Canali</p>
+              <div className="chat-mode-toggle">
+                {visibleChannels.map((c) => (
+                  <button
+                    key={c}
+                    type="button"
+                    className={conversation.kind === 'channel' && conversation.channel === c ? 'active' : ''}
+                    onClick={() => {
+                      setConversation({ kind: 'channel', channel: c })
+                      setMobileConversationOpen(true)
+                    }}
+                  >
+                    <span className="chat-row-avatar" aria-hidden="true">{initials(CHAT_CHANNEL_LABELS[c])}</span>
+                    <span className="chat-row-label">{CHAT_CHANNEL_LABELS[c]}</span>
+                    {!(conversation.kind === 'channel' && conversation.channel === c) && (unreadByConversation.get(c) ?? 0) > 0 && (
+                      <span className="row-notify-dot" aria-label="Non letti" />
+                    )}
+                  </button>
+                ))}
+              </div>
+            </>
+          )}
+          {dmPartners.length > 0 && (
+            <>
+              <p className="muted chat-dm-label">Messaggi privati — solo tu e la persona scelta potete leggerli.</p>
+              <div className="chat-mode-toggle chat-dm-toggle">
+                {dmPartners.map((p) => {
+                  const key = `dm:${p.id}`
+                  const active = conversation.kind === 'dm' && conversation.userId === p.id
+                  return (
+                    <button
+                      key={p.id}
+                      type="button"
+                      className={active ? 'active' : ''}
+                      onClick={() => {
+                        setConversation({ kind: 'dm', userId: p.id })
+                        setMobileConversationOpen(true)
+                      }}
+                    >
+                      <span className="chat-row-avatar" aria-hidden="true">{initials(p.full_name)}</span>
+                      <span className="chat-row-label">{p.full_name}</span>
+                      {!active && (unreadByConversation.get(key) ?? 0) > 0 && <span className="row-notify-dot" aria-label="Non letti" />}
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          )}
         </div>
-      )}
-      {dmPartners.length > 0 && (
-        <>
-          <p className="muted chat-dm-label">Messaggi privati — solo tu e la persona scelta potete leggerli.</p>
-          <div className="chat-mode-toggle chat-dm-toggle">
-            {dmPartners.map((p) => {
-              const key = `dm:${p.id}`
-              const active = conversation.kind === 'dm' && conversation.userId === p.id
-              return (
-                <button key={p.id} type="button" className={active ? 'active' : ''} onClick={() => setConversation({ kind: 'dm', userId: p.id })}>
-                  {p.full_name}
-                  {!active && (unreadByConversation.get(key) ?? 0) > 0 && <span className="row-notify-dot" aria-label="Non letti" />}
-                </button>
-              )
-            })}
-          </div>
-        </>
-      )}
-      <p className="muted">
-        {conversation.kind === 'channel' && conversation.channel === 'generale'
-          ? "Canale aziendale — visibile a tutti i colleghi autenticati, aggiornato in tempo reale."
-          : conversation.kind === 'channel'
-          ? `Canale del reparto ${activeLabel} — comprende anche i commenti indirizzati al reparto, aggiornato in tempo reale.`
-          : `Chat privata con ${activeLabel} — comprende anche i commenti scambiati tra voi due, aggiornato in tempo reale.`}
-      </p>
-      <div className="card chat-panel">
+        <div className="chat-detail-panel">
+          <button type="button" className="chat-detail-back-btn" onClick={() => setMobileConversationOpen(false)}>
+            <IconChevronsLeft /> Tutte le chat
+          </button>
+          <p className="muted">
+            {conversation.kind === 'channel' && conversation.channel === 'generale'
+              ? "Canale aziendale — visibile a tutti i colleghi autenticati, aggiornato in tempo reale."
+              : conversation.kind === 'channel'
+              ? `Canale del reparto ${activeLabel} — comprende anche i commenti indirizzati al reparto, aggiornato in tempo reale.`
+              : `Chat privata con ${activeLabel} — comprende anche i commenti scambiati tra voi due, aggiornato in tempo reale.`}
+          </p>
+          <div className="card chat-panel">
         <div className="chat-messages">
           {loading && <p className="muted">Caricamento…</p>}
           {!loading && items.length === 0 && <p className="muted">Nessun messaggio ancora — scrivi il primo.</p>}
@@ -491,6 +538,8 @@ export function Chat() {
             Invia
           </button>
         </form>
+          </div>
+        </div>
       </div>
     </div>
   )

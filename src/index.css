@@ -684,6 +684,38 @@ a.client-deal-row:hover { background: var(--surface-2); border-radius: 6px; }
 
 /* ---- chat aziendale ---- */
 .chat-view { display: flex; flex-direction: column; height: calc(100vh - 48px); }
+/* Contenitore di lista (canali + messaggi privati) e dettaglio (la chat
+   aperta): su desktop restano semplicemente una sopra l'altra, come sempre
+   — gli stessi .chat-list-panel/.chat-detail-panel diventano due "schermate"
+   separate solo sotto gli 860px (vedi media query), stile WhatsApp/Telegram
+   (richiesta di Andrea ott 2026). */
+.chat-layout { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+.chat-list-panel { flex: none; }
+.chat-detail-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; }
+/* Bottone "torna alla lista" dentro la chat aperta: serve solo su telefono,
+   dove lista e chat non stanno più una sopra l'altra ma si sostituiscono a
+   vicenda — stesso pattern già usato in Richieste/Clienti (.detail-back-btn),
+   vedi media query sotto. Su desktop resta nascosto. */
+.chat-detail-back-btn {
+  display: none; align-items: center; gap: 6px; border: none; background: none;
+  color: var(--accent); font-weight: 700; font-size: 13px; cursor: pointer;
+  padding: 0 0 10px; font-family: inherit;
+}
+.chat-detail-back-btn svg { width: 16px; height: 16px; }
+/* Avatar circolare con iniziali davanti al nome di un canale/collega nella
+   lista: invisibile sulle "pillole" del desktop, visibile solo nella lista
+   verticale di telefono (vedi media query) — stile WhatsApp/Telegram. */
+.chat-row-avatar {
+  display: none; align-items: center; justify-content: center;
+  width: 38px; height: 38px; border-radius: 50%; background: var(--accent-soft);
+  color: var(--accent); font-weight: 700; font-size: 13px; flex: none;
+}
+.chat-row-label { min-width: 0; }
+/* Intestazione "Canali" sopra la fila dei canali: serve solo su telefono,
+   dove la fila diventa una lista verticale a tutta larghezza e ha bisogno di
+   un titolo (come "Messaggi privati" qui sotto ha già .chat-dm-label). Su
+   desktop resta nascosta, i pulsanti bastano da soli come sempre. */
+.chat-section-label { display: none; }
 .chat-panel { display: flex; flex-direction: column; flex: 1; min-height: 0; padding: 16px; }
 .chat-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-bottom: 8px; }
 .chat-bubble-row { display: flex; }
@@ -963,15 +995,60 @@ a.client-deal-row:hover { background: var(--surface-2); border-radius: 6px; }
 
   /* Chat su telefono (richiesta di Andrea ott 2026): l'altezza era calcolata
      senza contare la nuova barra fissa in alto (54px), tagliando il fondo
-     della finestra (riga di scrittura inclusa). La fila di canali (Generale
-     + reparti) ora scorre in orizzontale invece di uscire dallo schermo. */
+     della finestra (riga di scrittura inclusa). */
   .chat-view { height: calc(100vh - 102px); }
+
+  /* Da qui in poi: non più una fila di "pillole" che scorre in orizzontale
+     (bisognava scorrere a destra per vedere tutti i canali/colleghi E
+     insieme parte del testo della chat, segnalato da Andrea ott 2026) ma
+     due schermate separate, esattamente come WhatsApp/Telegram: prima la
+     lista verticale a tutta larghezza di canali e persone, poi — dopo averne
+     toccata una — la chat a schermo intero con un bottone per tornare
+     indietro. Mai più scorrimento orizzontale. */
+  .chat-list-panel,
+  .chat-detail-panel { display: none; }
+  .chat-layout:not(.chat-layout-detail-open) .chat-list-panel { display: block; flex: 1; min-height: 0; overflow-y: auto; }
+  .chat-layout.chat-layout-detail-open .chat-detail-panel { display: flex; }
+  .chat-detail-back-btn { display: flex; }
+
+  .chat-section-label {
+    display: block; margin: 0 0 4px; padding: 0 2px; font-size: 11px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: .05em; color: var(--ink-3);
+  }
+  /* La frase sulla riservatezza resta leggibile com'è (niente maiuscolo):
+     fa comunque da separatore prima della lista delle persone, come
+     .chat-section-label fa per i canali qui sopra. */
+  .chat-dm-label { margin: 16px 0 6px; padding: 0 2px; font-size: 11.5px; }
+
   .chat-mode-toggle,
   .chat-dm-toggle {
-    max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch;
+    display: flex; flex-direction: column; width: 100%; max-width: none;
+    border: none; border-radius: 0; overflow: visible; margin-bottom: 4px;
   }
   .chat-mode-toggle button,
-  .chat-dm-toggle button { flex: none; }
+  .chat-dm-toggle button {
+    display: flex; align-items: center; gap: 12px; width: 100%; flex: none;
+    padding: 11px 2px; border: none; border-top: 1px solid var(--border); border-radius: 0;
+    background: none; text-align: left; font-size: 14.5px; font-weight: 600; color: var(--ink);
+  }
+  .chat-mode-toggle button:first-child,
+  .chat-dm-toggle button:first-child { border-top: none; }
+  /* La regola del desktop (".chat-mode-toggle button + button") aggiunge un
+     bordo a sinistra tra una "pillola" e l'altra: qui le righe sono intere
+     e una sotto l'altra, quel bordo a sinistra andrebbe tolto (resta solo
+     quello in alto già impostato sopra). */
+  .chat-mode-toggle button + button,
+  .chat-dm-toggle button + button { border-left: none; border-top: 1px solid var(--border); }
+  /* Sulla lista non serve più il riquadro colorato di "attivo" (il tocco
+     porta via subito alla chat, la lista resta indietro): solo il nome resta
+     leggermente in risalto, come già l'ultima conversazione aperta. */
+  .chat-mode-toggle button.active,
+  .chat-dm-toggle button.active { background: var(--surface-2); border-radius: 10px; }
+
+  .chat-row-avatar { display: flex; }
+  .chat-row-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .chat-mode-toggle button .row-notify-dot,
+  .chat-dm-toggle button .row-notify-dot { margin-left: 0; width: 10px; height: 10px; }
 }
 
 /* Pallino di notifica nel menu laterale (Chat, Richieste) */
