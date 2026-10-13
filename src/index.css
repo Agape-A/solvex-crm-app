@@ -251,6 +251,9 @@ a.tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border
 .new-deal-form { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; max-width: 480px; }
 .field-row { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
 .field-row-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; min-width: 0; }
+/* Valore + Quantità + Prezzo unitario nella finestra "Proposta Inviata"
+   (0056_prezzo_unitario_proposta.sql, richiesta di Andrea ott 2026). */
+.field-row-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; min-width: 0; }
 .field-row input, .field-row select, .field-row textarea {
   padding: 8px 10px; border-radius: 8px; border: 1px solid var(--border); background: var(--bg);
   width: 100%; max-width: 100%; box-sizing: border-box;
@@ -991,7 +994,7 @@ a.client-deal-row:hover { background: var(--surface-2); border-radius: 6px; }
   .client-row { grid-template-columns: 1fr; }
   .import-map-grid { grid-template-columns: 1fr; }
   .view-head { flex-wrap: wrap; gap: 10px; }
-  .field-row-2 { grid-template-columns: 1fr; }
+  .field-row-2, .field-row-3 { grid-template-columns: 1fr; }
 
   /* Chat su telefono (richiesta di Andrea ott 2026): l'altezza era calcolata
      senza contare la nuova barra fissa in alto (54px), tagliando il fondo

@@ -262,7 +262,13 @@ export function Pipeline() {
 
   async function confirmProposal(
     deal: Deal,
-    fields: { proposal_type: ProposalType; proposal_reference_code: string; proposal_value: number | null; proposal_quantity: number | null },
+    fields: {
+      proposal_type: ProposalType
+      proposal_reference_code: string
+      proposal_value: number | null
+      proposal_quantity: number | null
+      proposal_unit_price: number | null
+    },
   ) {
     setSavingId(deal.id)
     setDeals((current) => current.map((d) => (d.id === deal.id ? { ...d, stage: 'proposta', ...fields } : d)))
@@ -582,17 +588,29 @@ function ProposalModal({
 }: {
   deal: Deal
   onCancel: () => void
-  onConfirm: (fields: { proposal_type: ProposalType; proposal_reference_code: string; proposal_value: number | null; proposal_quantity: number | null }) => void
+  onConfirm: (fields: {
+    proposal_type: ProposalType
+    proposal_reference_code: string
+    proposal_value: number | null
+    proposal_quantity: number | null
+    proposal_unit_price: number | null
+  }) => void
   saving: boolean
 }) {
   const [proposalType, setProposalType] = useState<ProposalType | ''>('')
   const [referenceCode, setReferenceCode] = useState('')
   const [value, setValue] = useState('')
   const [quantity, setQuantity] = useState('')
+  // Affiancato al Valore (non lo sostituisce — richiesta di Andrea, ott
+  // 2026): due dati distinti, inseriti entrambi a mano, vedi
+  // 0056_prezzo_unitario_proposta.sql.
+  const [unitPrice, setUnitPrice] = useState('')
 
   const needsValue = proposalType !== '' && PROPOSAL_TYPES_REQUIRING_VALUE.includes(proposalType)
   const canSubmit =
-    proposalType !== '' && referenceCode.trim() !== '' && (!needsValue || (value.trim() !== '' && quantity.trim() !== ''))
+    proposalType !== '' &&
+    referenceCode.trim() !== '' &&
+    (!needsValue || (value.trim() !== '' && quantity.trim() !== '' && unitPrice.trim() !== ''))
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -606,6 +624,7 @@ function ProposalModal({
       proposal_reference_code: referenceCode.trim(),
       proposal_value: needsValue ? Number(value) : null,
       proposal_quantity: needsValue ? Number(quantity) : null,
+      proposal_unit_price: needsValue ? Number(unitPrice) : null,
     })
   }
 
@@ -645,7 +664,7 @@ function ProposalModal({
               <input value={referenceCode} onChange={(e) => setReferenceCode(e.target.value)} required />
             </div>
             {needsValue && (
-              <div className="field-row-2">
+              <div className="field-row-3">
                 <div className="field-row">
                   <label className="field-label">Valore *</label>
                   <input type="number" min="0" step="0.01" value={value} onChange={(e) => setValue(e.target.value)} required />
@@ -653,6 +672,10 @@ function ProposalModal({
                 <div className="field-row">
                   <label className="field-label">Quantità *</label>
                   <input type="number" min="0" step="0.01" value={quantity} onChange={(e) => setQuantity(e.target.value)} required />
+                </div>
+                <div className="field-row">
+                  <label className="field-label">Prezzo unitario *</label>
+                  <input type="number" min="0" step="0.01" value={unitPrice} onChange={(e) => setUnitPrice(e.target.value)} required />
                 </div>
               </div>
             )}
@@ -972,6 +995,12 @@ function DealDetails({
             <div className="field-row">
               <label className="field-label">Quantità</label>
               <span>{deal.proposal_quantity}</span>
+            </div>
+          )}
+          {deal.proposal_unit_price !== null && (
+            <div className="field-row">
+              <label className="field-label">Prezzo unitario</label>
+              <span>{currency.format(deal.proposal_unit_price)}</span>
             </div>
           )}
         </div>

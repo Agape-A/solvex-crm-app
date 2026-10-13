@@ -140,6 +140,9 @@ database.
      della notifica push della chat: un messaggio privato 1-a-1 finiva nel
      ramo pensato per i canali di reparto e veniva notificato a ogni
      dirigente, non solo al vero destinatario).
+   - `supabase/migrations/0056_prezzo_unitario_proposta.sql` (aggiunge il
+     prezzo unitario alla finestra "Proposta Inviata" in Pipeline, accanto
+     al Valore già presente).
    Se non li hai già eseguiti con `supabase db push` o incollandoli a mano.
 2. Supabase → **Edge Functions** → **Deploy a new function** → **Via
    Editor** → nome esatto `manage-users`.

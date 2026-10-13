@@ -455,6 +455,9 @@ export interface Deal {
   proposal_reference_code: string | null
   proposal_value: number | null
   proposal_quantity: number | null
+  // Affiancato a proposal_value (non lo sostituisce), richiesta di Andrea
+  // ott 2026 — vedi 0056_prezzo_unitario_proposta.sql.
+  proposal_unit_price: number | null
   created_at: string
   updated_at: string
 }
