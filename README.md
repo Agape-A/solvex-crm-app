@@ -136,6 +136,10 @@ database.
      numero anche senza nessun pallino visibile su un canale o una chat
      privata — causato da vecchi commenti "pubblici", senza nessun
      destinatario, scritti prima di esistere i commenti con destinatario).
+   - `supabase/migrations/0055_fix_push_dm_privati.sql` (corregge un bug
+     della notifica push della chat: un messaggio privato 1-a-1 finiva nel
+     ramo pensato per i canali di reparto e veniva notificato a ogni
+     dirigente, non solo al vero destinatario).
    Se non li hai già eseguiti con `supabase db push` o incollandoli a mano.
 2. Supabase → **Edge Functions** → **Deploy a new function** → **Via
    Editor** → nome esatto `manage-users`.
