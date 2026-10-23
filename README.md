@@ -143,6 +143,10 @@ database.
    - `supabase/migrations/0056_prezzo_unitario_proposta.sql` (aggiunge il
      prezzo unitario alla finestra "Proposta Inviata" in Pipeline, accanto
      al Valore già presente).
+   - `supabase/migrations/0057_fix_richieste_inviate_visibili.sql`
+     (corregge un bug: chi non è dirigente, mandando una richiesta a un
+     reparto diverso dal proprio, non la vedeva più nella propria pagina
+     "Inviate" — il destinatario sì, il mittente no).
    Se non li hai già eseguiti con `supabase db push` o incollandoli a mano.
 2. Supabase → **Edge Functions** → **Deploy a new function** → **Via
    Editor** → nome esatto `manage-users`.
