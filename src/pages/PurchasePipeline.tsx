@@ -27,7 +27,7 @@ import {
 
 // Pipeline acquisti, ridisegnata (set 2026, poi allineata definitivamente
 // alla Pipeline clienti su richiesta esplicita di Andrea): "+ Nuova
-// richiesta" apre il form guidato con i 4 tipi attività (Incontro
+// attività" apre il form guidato con i 4 tipi attività (Incontro
 // Fornitore, Richiesta Analisi Campione Fornitore, Reclamo Fornitore,
 // Riunione Interna) — il fornitore si sceglie nel form stesso. Ogni
 // attività registrata vive in procurement_activities (ex
@@ -41,7 +41,7 @@ import {
 // da_inviare→ricevuta — 0014_pipeline_acquisti.sql, tabella
 // "purchase_requests") non è più la vista di questa pagina: le richieste
 // create prima di questo aggiornamento restano nel database, consultabili
-// via Supabase, ma "+ Nuova richiesta" da oggi crea solo attività con la
+// via Supabase, ma "+ Nuova attività" da oggi crea solo attività con la
 // bacheca per stato qui sotto. Pagina visibile solo a "ufficio_acquisti" e
 // "dirigente" — vedi 0013_moduli_ruoli.sql.
 // Semplificazione ruoli, ott 2026: dipendeva dal ruolo 'ufficio_acquisti',
@@ -219,7 +219,7 @@ export function PurchasePipeline() {
       <div className="view-head">
         <h1>Pipeline acquisti</h1>
         <button className="btn btn-primary" onClick={() => setShowActivityForm((v) => !v)}>
-          {showActivityForm ? 'Annulla' : '+ Nuova richiesta'}
+          {showActivityForm ? 'Annulla' : '+ Nuova attività'}
         </button>
       </div>
 
@@ -232,11 +232,7 @@ export function PurchasePipeline() {
         />
       )}
 
-      <p className="muted">
-        Ogni attività registrata (Incontro Fornitore, Richiesta Analisi Campione Fornitore, Reclamo Fornitore,
-        Riunione Interna) genera qui una scheda che segue lo stato Nuova → In lavorazione → Risolta — la stessa
-        bacheca che trovi anche nella pagina "Richieste".
-      </p>
+      <p className="muted">È la bacheca delle attività che l'ufficio acquisti registra.</p>
 
       {(activitiesLoading || acquistiRequestsLoading) && <p className="muted">Caricamento…</p>}
       {!activitiesLoading && !acquistiRequestsLoading && acquistiRequests.length === 0 && !showActivityForm && (

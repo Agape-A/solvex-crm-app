@@ -219,6 +219,8 @@ export function Requests() {
         </div>
       </div>
 
+      <p className="muted">Elenco generale di tutte le richieste, di chiunque verso chiunque.</p>
+
       {showForm && (
         <NewRequestForm
           profiles={profiles}
