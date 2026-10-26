@@ -487,6 +487,10 @@ export interface Request {
   due_date: string | null
   source_email_id: string | null
   tags: string[]
+  // Allegato facoltativo (JPEG, Word, PDF o Excel — richiesta di Andrea,
+  // ott 2026), vedi 0058_allegati_richieste.sql.
+  attachment_url: string | null
+  attachment_name: string | null
   created_at: string
   updated_at: string
 }

@@ -1,4 +1,4 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
@@ -11,6 +11,14 @@ import { type Client, type Profile, type Request, type RequestDepartment, type R
 const STATUSES: RequestStatus[] = ['nuova', 'lavorazione', 'risolta']
 const DEPARTMENTS: RequestDepartment[] = ['commerciale', 'tecnico', 'operativo', 'amministrazione', 'acquisti', 'ricerca']
 const PRIORITIES: RequestPriority[] = ['alta', 'media', 'bassa']
+
+// Allegato facoltativo su una richiesta (richiesta di Andrea, ott 2026):
+// solo i 4 formati citati — immagine JPEG, Word, PDF o Excel — sia come
+// estensione che come MIME type, per coprire anche i file senza estensione
+// nel nome mostrato dal selettore del sistema.
+const REQUEST_ATTACHMENT_ACCEPT =
+  '.jpg,.jpeg,image/jpeg,.doc,.docx,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.pdf,application/pdf,.xls,.xlsx,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+const REQUEST_ATTACHMENT_EXTENSIONS = ['.jpg', '.jpeg', '.doc', '.docx', '.pdf', '.xls', '.xlsx']
 
 // Filtro per stato in testata, come una scheda separata per ciascuno stato:
 // di default si vedono solo le "Nuove", così le richieste risolte non
@@ -335,6 +343,7 @@ export function Requests() {
                   {r.due_date && ' · scade ' + new Date(r.due_date).toLocaleDateString('it-IT')}
                   {clientFor(r) && ' · cliente collegato'}
                   {r.ref_table && r.ref_id && ' · record collegato'}
+                  {r.attachment_url && ' · 📎 allegato'}
                 </div>
               </div>
               <span className={'pill pill-' + r.status}>{r.status}</span>
@@ -371,6 +380,13 @@ export function Requests() {
                   ) : (
                     <Link to={refLinkPath(selected.ref_table, selected.ref_id)}>{refLabel}</Link>
                   )}
+                </p>
+              )}
+              {selected.attachment_url && (
+                <p className="muted">
+                  <a href={selected.attachment_url} target="_blank" rel="noreferrer">
+                    📎 {selected.attachment_name ?? 'Allegato'}
+                  </a>
                 </p>
               )}
 
@@ -439,8 +455,37 @@ function NewRequestForm({
   const [refTable, setRefTable] = useState<RequestRefTable | ''>('')
   const [refId, setRefId] = useState('')
   const [saving, setSaving] = useState(false)
+  // Allegato facoltativo (JPEG, Word, PDF o Excel — richiesta di Andrea,
+  // ott 2026), stesso schema già usato in Marketing.tsx (upload diretto nel
+  // bucket, poi l'url pubblico va nella riga della richiesta).
+  const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null)
+  const [attachmentName, setAttachmentName] = useState<string | null>(null)
+  const [uploading, setUploading] = useState(false)
 
   const peopleInDepartment = profiles.filter((p) => p.department === department)
+
+  async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const extension = '.' + (file.name.split('.').pop() ?? '').toLowerCase()
+    if (!REQUEST_ATTACHMENT_EXTENSIONS.includes(extension)) {
+      alert('Formato non supportato: solo JPEG, Word, PDF o Excel.')
+      e.target.value = ''
+      return
+    }
+    setUploading(true)
+    const path = `${Date.now()}-${file.name.replace(/[^a-zA-Z0-9._-]/g, '_')}`
+    const { error } = await supabase.storage.from('request-attachments').upload(path, file, { upsert: true })
+    setUploading(false)
+    e.target.value = ''
+    if (error) {
+      alert("Non è stato possibile caricare l'allegato: " + error.message)
+      return
+    }
+    const { data } = supabase.storage.from('request-attachments').getPublicUrl(path)
+    setAttachmentUrl(data.publicUrl)
+    setAttachmentName(file.name)
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -459,6 +504,8 @@ function NewRequestForm({
       assignee_id: assigneeId || null,
       type: 'esterna',
       status: 'nuova',
+      attachment_url: attachmentUrl,
+      attachment_name: attachmentName,
     })
     setSaving(false)
     if (error) {
@@ -540,6 +587,29 @@ function NewRequestForm({
       <div className="field-row">
         <label className="field-label">Dettagli</label>
         <textarea className="note-field" value={body} onChange={(e) => setBody(e.target.value)} />
+      </div>
+      <div className="field-row">
+        <label className="field-label">Allegato (facoltativo — JPEG, Word, PDF o Excel)</label>
+        {attachmentUrl ? (
+          <div className="marketing-attachment-row">
+            <a href={attachmentUrl} target="_blank" rel="noreferrer">
+              📎 {attachmentName}
+            </a>
+            <button
+              type="button"
+              className="btn btn-ghost"
+              onClick={() => {
+                setAttachmentUrl(null)
+                setAttachmentName(null)
+              }}
+            >
+              Rimuovi
+            </button>
+          </div>
+        ) : (
+          <input type="file" accept={REQUEST_ATTACHMENT_ACCEPT} onChange={handleFileChange} disabled={uploading} />
+        )}
+        {uploading && <span className="muted">Caricamento…</span>}
       </div>
       <button className="btn btn-primary" type="submit" disabled={saving}>
         {saving ? 'Creazione…' : 'Crea richiesta'}

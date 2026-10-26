@@ -147,6 +147,9 @@ database.
      (corregge un bug: chi non è dirigente, mandando una richiesta a un
      reparto diverso dal proprio, non la vedeva più nella propria pagina
      "Inviate" — il destinatario sì, il mittente no).
+   - `supabase/migrations/0058_allegati_richieste.sql` (aggiunge un
+     allegato facoltativo — JPEG, Word, PDF o Excel — a "Nuova richiesta"
+     in Richieste, con un bucket Storage dedicato).
    Se non li hai già eseguiti con `supabase db push` o incollandoli a mano.
 2. Supabase → **Edge Functions** → **Deploy a new function** → **Via
    Editor** → nome esatto `manage-users`.
