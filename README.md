@@ -150,6 +150,9 @@ database.
    - `supabase/migrations/0058_allegati_richieste.sql` (aggiunge un
      allegato facoltativo — JPEG, Word, PDF o Excel — a "Nuova richiesta"
      in Richieste, con un bucket Storage dedicato).
+   - `supabase/migrations/0059_tecnico_crea_contatti.sql` (anche il
+     reparto tecnico può ora creare un nuovo contatto in Pipeline clienti,
+     non solo commerciale/dirigente).
    Se non li hai già eseguiti con `supabase db push` o incollandoli a mano.
 2. Supabase → **Edge Functions** → **Deploy a new function** → **Via
    Editor** → nome esatto `manage-users`.

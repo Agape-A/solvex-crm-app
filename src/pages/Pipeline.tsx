@@ -33,7 +33,13 @@ import {
 
 // Semplificazione ruoli, ott 2026: dipendeva dal ruolo 'commerciale',
 // ora dal reparto 'commerciale' (più il bypass dirigente ovunque usato qui sotto).
-const CAN_CREATE_DELETE_DEPARTMENTS: string[] = ['commerciale']
+// Chi può creare un nuovo contatto (il pulsante "+ Nuovo Contatto") — oltre
+// a commerciale, da ott 2026 anche il reparto tecnico (richiesta di Andrea,
+// vedi 0059_tecnico_crea_contatti.sql, che allarga anche la RLS lato
+// database allo stesso modo). Il nome della costante resta "...DELETE..."
+// per compatibilità storica, ma qui non governa nessuna eliminazione — vedi
+// deals_delete nel database, invariata.
+const CAN_CREATE_DELETE_DEPARTMENTS: string[] = ['commerciale', 'tecnico']
 
 const currency = new Intl.NumberFormat('it-IT', {
   style: 'currency',
@@ -176,11 +182,13 @@ export function Pipeline() {
   const canCreate = profile
     ? profile.role === 'dirigente' || (!!profile.department && CAN_CREATE_DELETE_DEPARTMENTS.includes(profile.department))
     : false
-  // Il tecnico vede solo le trattative con "Richiede validazione tecnica"
-  // attivo (0038_proprietario_clienti_e_validazione_tecnica.sql) e, per via
-  // del trigger nel database, può salvare solo modifiche al campo "note":
-  // niente trascinamento, niente cambio fase o proprietario — il vero
-  // controllo resta comunque lato server (0003_triggers.sql).
+  // Il tecnico vede le trattative con "Richiede validazione tecnica" attivo
+  // (0038_proprietario_clienti_e_validazione_tecnica.sql) PIÙ le proprie, da
+  // quando può crearne (0059_tecnico_crea_contatti.sql) — e, per via del
+  // trigger nel database, può salvare solo modifiche al campo "note", anche
+  // su quelle che ha creato lui: niente trascinamento, niente cambio fase o
+  // proprietario — il vero controllo resta comunque lato server
+  // (0003_triggers.sql, enforce_deal_update_permissions).
   const canEditFields = profile?.role === 'dirigente' || profile?.department === 'commerciale'
   // "Utente" (ex "Proprietario") è sempre e solo chi crea la trattativa —
   // nessuno può più cambiarlo a mano, nemmeno dirigente/amministrazione
