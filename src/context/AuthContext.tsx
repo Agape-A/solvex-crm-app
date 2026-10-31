@@ -61,6 +61,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!session) return
+    // Se abbiamo già il profilo di questo stesso utente non serve
+    // ricaricarlo: evita il breve "loading" che altrimenti scatta anche
+    // quando il token si rinnova in background (es. minimizzando la
+    // finestra o tornando sull'app dopo averla lasciata in background) -
+    // mentre loading è true, ProtectedRoute smonta la pagina corrente al
+    // posto di lasciarla dov'era, e con essa va perso qualunque testo non
+    // ancora salvato che si stava scrivendo (segnalato da Andrea, ott 2026).
+    if (profile && profile.id === session.user.id) return
     setLoading(true)
     supabase
       .from('profiles')
