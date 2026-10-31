@@ -2,7 +2,18 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
-import { CLIENT_TYPE_LABELS, hasFullAccess, type Client, type CommentRefTable, type Profile, type RequestDepartment } from '../lib/types'
+import {
+  CLIENT_TYPE_LABELS,
+  hasFullAccess,
+  type Client,
+  type CommentRefTable,
+  type Deal,
+  type Profile,
+  type Request,
+  type RequestDepartment,
+  type ResearchRecord,
+  type Supplier,
+} from '../lib/types'
 import { disablePush, enablePush, getPushStatus, pushSupported, type PushStatus } from '../lib/push'
 import {
   IconDashboard,
@@ -227,7 +238,7 @@ export function Layout({ children }: { children: ReactNode }) {
             <IconChevronsLeft />
           </button>
         </div>
-        {!collapsed && <ClientSearch />}
+        {!collapsed && <GlobalSearch />}
         <nav className="nav">
           {NAV.filter((item) => canSeePage(item.to, profile)).map((item) => {
             const Icon = item.icon
@@ -341,16 +352,46 @@ function PushButton({ collapsed }: { collapsed: boolean }) {
   )
 }
 
-// ============ Ricerca clienti globale ============
-// Disponibile da qualsiasi pagina: cerca per ragione sociale e porta dritto
-// alla scheda cliente in Clienti, senza dover prima aprire quella sezione e
-// scorrere l'elenco. Per il ruolo operatore la RLS su "clients" restituisce
-// sempre zero risultati — la ricerca resta lì ma di fatto non trova nulla.
+// ============ Ricerca globale ============
+// Disponibile da qualsiasi pagina: cerca su clienti, trattative Pipeline,
+// richieste, fornitori e Ricerca&Sviluppo, e porta dritto alla scheda giusta
+// senza dover prima aprire quella sezione e scorrere l'elenco (richiesta di
+// Andrea, ott 2026 - prima cercava solo tra i clienti, ora e' generica).
+// Ogni tabella ha gia' le sue regole RLS per ruolo/reparto, le stesse della
+// pagina corrispondente: qui non si aggiunge nessun controllo in piu', un
+// utente trova solo cio' che potrebbe comunque vedere apendo quella pagina
+// - per un operatore senza accesso clienti, ad esempio, la query su
+// "clients" torna semplicemente zero righe, come gia' succedeva prima qui.
 
-function ClientSearch() {
+type SearchResultType = 'cliente' | 'trattativa' | 'richiesta' | 'fornitore' | 'ricerca'
+
+interface SearchResult {
+  type: SearchResultType
+  id: string
+  title: string
+  subtitle: string
+}
+
+const SEARCH_GROUP_LABELS: Record<SearchResultType, string> = {
+  cliente: 'Clienti',
+  trattativa: 'Pipeline clienti',
+  richiesta: 'Richieste',
+  fornitore: 'Fornitori',
+  ricerca: 'Ricerca&Sviluppo',
+}
+
+const SEARCH_RESULT_LINK: Record<SearchResultType, (id: string) => string> = {
+  cliente: (id) => `/clienti?cliente=${id}`,
+  trattativa: (id) => `/pipeline?deal=${id}`,
+  richiesta: (id) => `/richieste?id=${id}`,
+  fornitore: (id) => `/fornitori?fornitore=${id}`,
+  ricerca: (id) => `/ricerche?id=${id}`,
+}
+
+function GlobalSearch() {
   const navigate = useNavigate()
   const [query, setQuery] = useState('')
-  const [results, setResults] = useState<Client[]>([])
+  const [results, setResults] = useState<SearchResult[]>([])
   const [open, setOpen] = useState(false)
   const [searching, setSearching] = useState(false)
   const boxRef = useRef<HTMLDivElement>(null)
@@ -363,8 +404,49 @@ function ClientSearch() {
     }
     setSearching(true)
     const timeout = setTimeout(async () => {
-      const { data } = await supabase.from('clients').select('*').ilike('name', `%${q}%`).order('name').limit(8)
-      setResults((data as Client[]) ?? [])
+      const like = `%${q}%`
+      const [clients, deals, requests, suppliers, research] = await Promise.all([
+        supabase.from('clients').select('id,name,client_type').ilike('name', like).order('name').limit(5),
+        supabase.from('deals').select('id,client_name,product').ilike('client_name', like).order('client_name').limit(5),
+        supabase.from('requests').select('id,subject,sender').ilike('subject', like).order('created_at', { ascending: false }).limit(5),
+        supabase.from('suppliers').select('id,name,category').ilike('name', like).order('name').limit(5),
+        supabase.from('research_records').select('id,title,product').ilike('title', like).order('title').limit(5),
+      ])
+
+      const combined: SearchResult[] = [
+        ...((clients.data as Pick<Client, 'id' | 'name' | 'client_type'>[]) ?? []).map((c) => ({
+          type: 'cliente' as const,
+          id: c.id,
+          title: c.name,
+          subtitle: CLIENT_TYPE_LABELS[c.client_type],
+        })),
+        ...((deals.data as Pick<Deal, 'id' | 'client_name' | 'product'>[]) ?? []).map((d) => ({
+          type: 'trattativa' as const,
+          id: d.id,
+          title: d.client_name,
+          subtitle: d.product,
+        })),
+        ...((requests.data as Pick<Request, 'id' | 'subject' | 'sender'>[]) ?? []).map((r) => ({
+          type: 'richiesta' as const,
+          id: r.id,
+          title: r.subject,
+          subtitle: r.sender,
+        })),
+        ...((suppliers.data as Pick<Supplier, 'id' | 'name' | 'category'>[]) ?? []).map((s) => ({
+          type: 'fornitore' as const,
+          id: s.id,
+          title: s.name,
+          subtitle: s.category,
+        })),
+        ...((research.data as Pick<ResearchRecord, 'id' | 'title' | 'product'>[]) ?? []).map((r) => ({
+          type: 'ricerca' as const,
+          id: r.id,
+          title: r.title,
+          subtitle: r.product,
+        })),
+      ]
+
+      setResults(combined)
       setSearching(false)
     }, 250)
     return () => clearTimeout(timeout)
@@ -378,19 +460,23 @@ function ClientSearch() {
     return () => document.removeEventListener('mousedown', onClickOutside)
   }, [])
 
-  function goTo(client: Client) {
+  function goTo(result: SearchResult) {
     setOpen(false)
     setQuery('')
     setResults([])
-    navigate(`/clienti?cliente=${client.id}`)
+    navigate(SEARCH_RESULT_LINK[result.type](result.id))
   }
+
+  const groups = (['cliente', 'trattativa', 'richiesta', 'fornitore', 'ricerca'] as SearchResultType[])
+    .map((type) => ({ type, items: results.filter((r) => r.type === type) }))
+    .filter((group) => group.items.length > 0)
 
   return (
     <div className="sidebar-search" ref={boxRef}>
       <IconSearch className="sidebar-search-icon" />
       <input
         className="sidebar-search-input"
-        placeholder="Cerca cliente…"
+        placeholder="Cerca..."
         value={query}
         onChange={(e) => {
           setQuery(e.target.value)
@@ -400,17 +486,23 @@ function ClientSearch() {
       />
       {open && query.trim().length >= 2 && (
         <div className="sidebar-search-results">
-          {searching && <div className="sidebar-search-empty muted">Ricerca…</div>}
-          {!searching && results.length === 0 && <div className="sidebar-search-empty muted">Nessun cliente trovato.</div>}
+          {searching && <div className="sidebar-search-empty muted">Ricerca...</div>}
+          {!searching && groups.length === 0 && <div className="sidebar-search-empty muted">Nessun risultato.</div>}
           {!searching &&
-            results.map((c) => (
-              <button key={c.id} type="button" className="sidebar-search-result" onClick={() => goTo(c)}>
-                <strong>{c.name}</strong>
-                <span className="muted">{CLIENT_TYPE_LABELS[c.client_type]}</span>
-              </button>
+            groups.map((group) => (
+              <div key={group.type}>
+                <div className="sidebar-search-group-label">{SEARCH_GROUP_LABELS[group.type]}</div>
+                {group.items.map((item) => (
+                  <button key={group.type + item.id} type="button" className="sidebar-search-result" onClick={() => goTo(item)}>
+                    <strong>{item.title}</strong>
+                    <span className="muted">{item.subtitle}</span>
+                  </button>
+                ))}
+              </div>
             ))}
         </div>
       )}
     </div>
   )
 }
+
