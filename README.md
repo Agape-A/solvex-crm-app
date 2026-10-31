@@ -153,6 +153,11 @@ database.
    - `supabase/migrations/0059_tecnico_crea_contatti.sql` (anche il
      reparto tecnico può ora creare un nuovo contatto in Pipeline clienti,
      non solo commerciale/dirigente).
+   - `supabase/migrations/0060_dirigente_no_tutti_canali.sql` (l'account
+     direzione non riceve più notifica push e pallino non letti per OGNI
+     canale di reparto, anche quelli a cui non appartiene — solo per
+     "generale", il proprio reparto e le chat private dove è coinvolto,
+     come chiunque altro).
    Se non li hai già eseguiti con `supabase db push` o incollandoli a mano.
 2. Supabase → **Edge Functions** → **Deploy a new function** → **Via
    Editor** → nome esatto `manage-users`.
