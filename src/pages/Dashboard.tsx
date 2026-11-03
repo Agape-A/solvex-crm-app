@@ -65,12 +65,22 @@ export function Dashboard() {
       .neq('status', 'risolta')
       .then(({ count }) => setRequestsOpen(count ?? 0))
 
-    supabase
-      .from('activity_log')
-      .select('*')
-      .order('created_at', { ascending: false })
-      .limit(8)
-      .then(({ data }) => setActivity((data as ActivityLogEntry[]) ?? []))
+    // "Attivita' recente" mostra solo le azioni di CHI sta guardando, non di
+    // tutti (segnalato da Andrea, nov 2026: "la dashboard di ogni utente deve
+    // riflettere le ultime attivita' solo dell'utente, ad oggi tutti vedono
+    // tutto"). La RLS su activity_log lascia leggere a chiunque sia
+    // autenticato qualunque riga (serve ad altri usi, es. la cronologia di
+    // un singolo record in Clients.tsx, visibile a chiunque veda quel
+    // record) - qui il filtro per attore va aggiunto lato query.
+    if (profile) {
+      supabase
+        .from('activity_log')
+        .select('*')
+        .eq('actor_id', profile.id)
+        .order('created_at', { ascending: false })
+        .limit(8)
+        .then(({ data }) => setActivity((data as ActivityLogEntry[]) ?? []))
+    }
 
     if (canSeePipeline) {
       supabase
@@ -111,7 +121,7 @@ export function Dashboard() {
         .then(({ data }) => setTodayAppointments((data as Appointment[]) ?? []))
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [canSeePipeline, canSeeAppointments])
+  }, [canSeePipeline, canSeeAppointments, profile?.id])
 
   const hasAlerts =
     rottingDeals.length > 0 || (showRequestsTile && dueRequests.length > 0) || todayAppointments.length > 0
