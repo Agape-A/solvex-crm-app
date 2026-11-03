@@ -158,6 +158,10 @@ database.
      canale di reparto, anche quelli a cui non appartiene — solo per
      "generale", il proprio reparto e le chat private dove è coinvolto,
      come chiunque altro).
+   - `supabase/migrations/0061_tecnico_inserisce_clienti.sql` (anche il
+     reparto tecnico può ora inserire un nuovo cliente in Clienti, non
+     solo commerciale/dirigente — resta di sola lettura su tutti gli
+     altri clienti già esistenti).
    Se non li hai già eseguiti con `supabase db push` o incollandoli a mano.
 2. Supabase → **Edge Functions** → **Deploy a new function** → **Via
    Editor** → nome esatto `manage-users`.

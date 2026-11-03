@@ -25,6 +25,13 @@ const TYPE_FILTERS: (ClientType | 'tutti')[] = ['tutti', 'conceria', 'distributo
 // Semplificazione ruoli, ott 2026: dipendeva dal ruolo 'commerciale',
 // ora dal reparto 'commerciale' (più il bypass dirigente, qui sotto).
 const CAN_WRITE_DEPARTMENTS: string[] = ['commerciale']
+// Anche il reparto tecnico può ora inserire nuovi clienti (richiesta di
+// Andrea, nov 2026), ma solo QUELLO: resta "di sola lettura" su tutti gli
+// altri (vedi canWrite/CAN_WRITE_DEPARTMENTS sopra, invariato) — un tecnico
+// non può modificare o eliminare una scheda cliente già esistente, solo
+// crearne una propria (coerente con 0059_tecnico_crea_contatti.sql, la
+// stessa estensione già fatta per le trattative in Pipeline.tsx).
+const CAN_CREATE_CLIENT_DEPARTMENTS: string[] = ['commerciale', 'tecnico']
 const currency = new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 })
 
 export function Clients() {
@@ -47,6 +54,9 @@ export function Clients() {
 
   const canWrite = profile
     ? profile.role === 'dirigente' || (!!profile.department && CAN_WRITE_DEPARTMENTS.includes(profile.department))
+    : false
+  const canCreateClient = profile
+    ? profile.role === 'dirigente' || (!!profile.department && CAN_CREATE_CLIENT_DEPARTMENTS.includes(profile.department))
     : false
   const canSeeDeals =
     profile?.role === 'dirigente' || (!!profile?.department && ['tecnico', 'commerciale'].includes(profile.department))
@@ -204,17 +214,19 @@ export function Clients() {
     <div className="view">
       <div className="view-head">
         <h1>Clienti</h1>
-        {canWrite && (
+        {canCreateClient && (
           <div className="view-head-actions">
-            <button
-              className="btn btn-ghost"
-              onClick={() => {
-                setShowImport((v) => !v)
-                setShowForm(false)
-              }}
-            >
-              {showImport ? 'Annulla importazione' : 'Importa da Excel/CSV'}
-            </button>
+            {canWrite && (
+              <button
+                className="btn btn-ghost"
+                onClick={() => {
+                  setShowImport((v) => !v)
+                  setShowForm(false)
+                }}
+              >
+                {showImport ? 'Annulla importazione' : 'Importa da Excel/CSV'}
+              </button>
+            )}
             <button
               className="btn btn-primary"
               onClick={() => {
