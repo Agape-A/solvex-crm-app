@@ -60,7 +60,7 @@ export function Suppliers() {
   // Deep-link (es. dalla scheda di una richiesta nella Pipeline acquisti).
   useEffect(() => {
     const fromLink = searchParams.get('fornitore')
-    if (!fromLink) return
+    if (!fromLink || suppliers.length === 0) return
     const supplier = suppliers.find((s) => s.id === fromLink)
     if (supplier) setSelected(supplier)
     setSearchParams({}, { replace: true })

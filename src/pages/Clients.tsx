@@ -141,7 +141,7 @@ export function Clients() {
   // non solo al primo caricamento.
   useEffect(() => {
     const fromLink = searchParams.get('cliente')
-    if (!fromLink) return
+    if (!fromLink || clients.length === 0) return
     const client = clients.find((c) => c.id === fromLink)
     if (client) setSelected(client)
     setSearchParams({}, { replace: true })

@@ -81,7 +81,7 @@ export function Research() {
 
   useEffect(() => {
     const fromLink = searchParams.get('id')
-    if (!fromLink) return
+    if (!fromLink || records.length === 0) return
     const record = records.find((r) => r.id === fromLink)
     if (record) setSelected(record)
     setSearchParams({}, { replace: true })

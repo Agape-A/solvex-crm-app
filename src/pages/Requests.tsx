@@ -137,7 +137,7 @@ export function Requests() {
   // pagina, non solo al primo caricamento (stesso pattern usato in Clienti).
   useEffect(() => {
     const fromLink = searchParams.get('id')
-    if (!fromLink) return
+    if (!fromLink || requests.length === 0) return
     const request = requests.find((r) => r.id === fromLink)
     if (request) {
       setSelected(request)
