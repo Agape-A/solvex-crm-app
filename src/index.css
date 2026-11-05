@@ -1113,6 +1113,13 @@ a.client-deal-row:hover { background: var(--surface-2); border-radius: 6px; }
 }
 .stage-btn.current .stage-btn-notify { background: #fff; color: #e5484d; }
 .row-notify-dot { width: 7px; height: 7px; border-radius: 50%; background: #e5484d; flex: none; display: inline-block; }
+/* Pallino verde "online" accanto al nome nella lista Messaggi privati
+   (richiesta di Andrea, nov 2026) — stessa forma di .row-notify-dot, solo
+   verde invece che rosso e con un significato opposto (presenza, non
+   "non letto"). */
+.online-dot { width: 7px; height: 7px; border-radius: 50%; background: #30a46c; flex: none; display: inline-block; margin-left: 6px; }
+.chat-online-status { color: var(--ink-3); }
+.chat-online-status.is-online { color: #30a46c; font-weight: 600; }
 
 /* Report — tabella "Per persona" (trattative/richieste per collega) */
 .report-people-table { width: 100%; border-collapse: collapse; font-size: 13px; }

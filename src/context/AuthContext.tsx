@@ -30,6 +30,14 @@ interface AuthState {
   // un totale unico che mischierebbe record diversi.
   unreadCommentsByTable: Record<string, number>
   markCommentsSeen: (refTable: CommentRefTable, refId: string) => Promise<void>
+  // Chi ha l'app aperta in questo momento, ovunque (non solo sulla pagina
+  // Chat) — richiesta di Andrea, nov 2026: "vorrei fosse possibile
+  // visualizzare gli utenti online". Tracciato qui con la Presence di
+  // Supabase Realtime così "online" significa davvero "app aperta da
+  // qualche parte", non solo "sta guardando la Chat in questo istante" —
+  // la Chat (unico posto dove si mostra, richiesta di Andrea) lo legge da
+  // qui senza doverlo tracciare lei stessa.
+  onlineUserIds: Set<string>
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined)
@@ -41,6 +49,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [unreadChatCount, setUnreadChatCount] = useState(0)
   const [newRequestsCount, setNewRequestsCount] = useState(0)
   const [unreadCommentsByTable, setUnreadCommentsByTable] = useState<Record<string, number>>({})
+  const [onlineUserIds, setOnlineUserIds] = useState<Set<string>>(new Set())
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -243,6 +252,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [profile?.id, profile?.role, profile?.department])
 
+  // ============ Utenti online (Presence) ============
+  // Richiesta di Andrea, nov 2026. Un canale Presence condiviso ("online_users"),
+  // con chiave = id del profilo: ogni finestra/tab con l'app aperta e un
+  // profilo caricato si registra ("track") lì appena la sottoscrizione è
+  // attiva, e si cancella da sola quando la pagina si chiude o il profilo
+  // cambia (niente scrittura su tabella, la Presence di Supabase Realtime
+  // vive solo in memoria sui loro server). "sync" arriva sia all'ingresso
+  // che a ogni cambiamento (qualcuno si connette/disconnette): da lì si
+  // ricalcola l'intero set di id online.
+
+  useEffect(() => {
+    if (!profile) {
+      setOnlineUserIds(new Set())
+      return
+    }
+
+    const channel = supabase.channel('online_users', {
+      config: { presence: { key: profile.id } },
+    })
+
+    channel
+      .on('presence', { event: 'sync' }, () => {
+        setOnlineUserIds(new Set(Object.keys(channel.presenceState())))
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') {
+          channel.track({ online_at: new Date().toISOString() })
+        }
+      })
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
+  }, [profile?.id])
+
   // ============ Pallino rosso sull'icona dell'app (stile iPhone) ============
   // Richiesta di Andrea, ott 2026: "non appare il numero delle notifiche nel
   // classico cerchio rosso". Qui si tiene aggiornato il badge MENTRE l'app è
@@ -328,6 +372,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         markChatSeen,
         unreadCommentsByTable,
         markCommentsSeen,
+        onlineUserIds,
       }}
     >
       {children}

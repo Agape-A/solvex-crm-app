@@ -98,7 +98,7 @@ function timeLabel(iso: string): string {
 }
 
 export function Chat() {
-  const { profile, markChatSeen } = useAuth()
+  const { profile, markChatSeen, onlineUserIds } = useAuth()
   const [conversation, setConversation] = useState<ActiveConversation>({ kind: 'channel', channel: 'generale' })
   // Su telefono la pagina si apre sempre sulla lista di canali/persone (come
   // WhatsApp/Telegram, richiesta di Andrea ott 2026) — questa chat si apre a
@@ -426,6 +426,7 @@ export function Chat() {
                     >
                       <span className="chat-row-avatar" aria-hidden="true">{initials(p.full_name)}</span>
                       <span className="chat-row-label">{p.full_name}</span>
+                      {onlineUserIds.has(p.id) && <span className="online-dot" title="Online" aria-label="Online" />}
                       {!active && (unreadByConversation.get(key) ?? 0) > 0 && <span className="row-notify-dot" aria-label="Non letti" />}
                     </button>
                   )
@@ -444,6 +445,11 @@ export function Chat() {
               : conversation.kind === 'channel'
               ? `Canale del reparto ${activeLabel} — comprende anche i commenti indirizzati al reparto, aggiornato in tempo reale.`
               : `Chat privata con ${activeLabel} — comprende anche i commenti scambiati tra voi due, aggiornato in tempo reale.`}
+            {conversation.kind === 'dm' && (
+              <span className={'chat-online-status' + (onlineUserIds.has(conversation.userId) ? ' is-online' : '')}>
+                {onlineUserIds.has(conversation.userId) ? ' · online ora' : ' · non online'}
+              </span>
+            )}
           </p>
           <div className="card chat-panel">
         <div className="chat-messages">
