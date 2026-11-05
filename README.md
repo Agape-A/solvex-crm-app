@@ -162,6 +162,12 @@ database.
      reparto tecnico può ora inserire un nuovo cliente in Clienti, non
      solo commerciale/dirigente — resta di sola lettura su tutti gli
      altri clienti già esistenti).
+   - `supabase/migrations/0062_richieste_scadenza_assegnazione_pipeline.sql`
+     (tre correzioni: la scadenza di una richiesta è ora posticipabile
+     mantenendo quella originale; chi ha creato una richiesta può ora
+     modificarla anche se l'ha mandata a un reparto diverso dal proprio;
+     un lead creato dal dirigente non resta più invisibile a tutto il
+     commerciale in Pipeline clienti).
    Se non li hai già eseguiti con `supabase db push` o incollandoli a mano.
 2. Supabase → **Edge Functions** → **Deploy a new function** → **Via
    Editor** → nome esatto `manage-users`.

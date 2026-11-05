@@ -3,10 +3,11 @@ import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
 import { useAuth } from '../context/AuthContext'
 import { CommentThread } from '../components/CommentThread'
+import { ActivityAssignment } from '../components/ActivityAssignment'
 import { RefPicker } from '../components/RefPicker'
 import { IconChevronsLeft } from '../components/Icons'
 import { describeRef, refLinkPath, REQUEST_REF_LABELS, REQUEST_REF_TABLES, type RequestRefTable } from '../lib/refRecords'
-import { type Client, type Profile, type Request, type RequestDepartment, type RequestPriority, type RequestStatus } from '../lib/types'
+import { type Client, type PendingAssignment, type Profile, type Request, type RequestDepartment, type RequestPriority, type RequestStatus } from '../lib/types'
 
 const STATUSES: RequestStatus[] = ['nuova', 'lavorazione', 'risolta']
 const DEPARTMENTS: RequestDepartment[] = ['commerciale', 'tecnico', 'operativo', 'amministrazione', 'acquisti', 'ricerca']
@@ -212,6 +213,23 @@ export function Requests() {
     loadRequests()
   }
 
+  // Posticipare la scadenza senza perdere quella originale (richiesta di
+  // Andrea, nov 2026) — "due_date" qui si aggiorna liberamente, mentre
+  // "due_date_original" resta fissa alla prima data impostata: ce lo
+  // garantisce un trigger lato database (0062_richieste_scadenza_assegnazione_pipeline.sql), non
+  // serve nessun controllo in più qui.
+  async function updateDueDate(request: Request, dueDate: string) {
+    const { error } = await supabase
+      .from('requests')
+      .update({ due_date: dueDate || null })
+      .eq('id', request.id)
+    if (error) {
+      alert('Non è stato possibile aggiornare la scadenza: ' + error.message)
+      return
+    }
+    loadRequests()
+  }
+
   function peopleInDepartment(department: RequestDepartment) {
     return profiles.filter((p) => p.department === department)
   }
@@ -351,21 +369,39 @@ export function Requests() {
           ))}
         </div>
 
-        <div className="card detail-panel">
+        <div className="card detail-panel request-print-area">
           {!selected && <p className="muted">Seleziona una richiesta dall'elenco.</p>}
           {selected && (
             <>
-              <button type="button" className="detail-back-btn" onClick={() => setSelected(null)}>
-                <IconChevronsLeft /> Torna all'elenco
-              </button>
+              <div className="no-print request-detail-toolbar">
+                <button type="button" className="detail-back-btn" onClick={() => setSelected(null)}>
+                  <IconChevronsLeft /> Torna all'elenco
+                </button>
+                {/* Richiesta di Andrea, nov 2026: un tasto per stampare la
+                    singola scheda aperta — vedi le regole @media print in
+                    index.css, che nascondono tutto il resto della pagina. */}
+                <button type="button" className="btn btn-ghost" onClick={() => window.print()}>
+                  🖨️ Stampa
+                </button>
+              </div>
               <div className="eyebrow">
                 {selected.department} · {selected.type === 'interna' ? 'richiesta interna' : 'richiesta esterna'}
               </div>
               <h3>{selected.subject}</h3>
               <p className="muted">{selected.body}</p>
-              {selected.due_date && (
-                <p className="muted">Scadenza: {new Date(selected.due_date).toLocaleDateString('it-IT')}</p>
-              )}
+              <div className="field-row">
+                <label className="field-label">Scadenza</label>
+                <input
+                  type="date"
+                  value={selected.due_date ? selected.due_date.slice(0, 10) : ''}
+                  onChange={(e) => updateDueDate(selected, e.target.value)}
+                />
+                {selected.due_date_original && selected.due_date_original !== selected.due_date && (
+                  <span className="muted">
+                    Scadenza originale: {new Date(selected.due_date_original).toLocaleDateString('it-IT')}
+                  </span>
+                )}
+              </div>
               {clientFor(selected) && (
                 <p className="muted">
                   Cliente collegato:{' '}
@@ -451,7 +487,7 @@ function NewRequestForm({
   const [priority, setPriority] = useState<RequestPriority>('media')
   const [body, setBody] = useState('')
   const [dueDate, setDueDate] = useState('')
-  const [assigneeId, setAssigneeId] = useState('')
+  const [assignments, setAssignments] = useState<PendingAssignment[]>([])
   const [refTable, setRefTable] = useState<RequestRefTable | ''>('')
   const [refId, setRefId] = useState('')
   const [saving, setSaving] = useState(false)
@@ -490,7 +526,8 @@ function NewRequestForm({
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setSaving(true)
-    const { error } = await supabase.from('requests').insert({
+
+    const basePayload = {
       subject,
       sender: senderName,
       created_by: senderId,
@@ -499,14 +536,29 @@ function NewRequestForm({
       ref_id: refTable ? refId || null : null,
       department,
       priority,
-      body,
-      due_date: dueDate || null,
-      assignee_id: assigneeId || null,
-      type: 'esterna',
-      status: 'nuova',
+      type: 'esterna' as const,
+      status: 'nuova' as const,
       attachment_url: attachmentUrl,
       attachment_name: attachmentName,
-    })
+    }
+
+    // Nessuna persona scelta sotto "Assegnazione attività a": una sola
+    // richiesta, come prima, assegnata al solo reparto (assignee_id null).
+    // Una o più persone scelte: una richiesta SEPARATA per ciascuna, con il
+    // proprio testo aggiunto ai "Dettagli" comuni e la propria scadenza (o
+    // quella comune qui sopra, se non ne ha impostata una) — stesso
+    // meccanismo già in uso per i leeds in Pipeline.tsx.
+    const rows =
+      assignments.length === 0
+        ? [{ ...basePayload, body, due_date: dueDate || null, assignee_id: null }]
+        : assignments.map((a) => ({
+            ...basePayload,
+            body: body.trim() ? `${body.trim()}\n\n${a.task}` : a.task,
+            due_date: a.dueDate || dueDate || null,
+            assignee_id: a.userId,
+          }))
+
+    const { error } = await supabase.from('requests').insert(rows)
     setSaving(false)
     if (error) {
       alert('Non è stato possibile creare la richiesta: ' + error.message)
@@ -545,7 +597,7 @@ function NewRequestForm({
             value={department}
             onChange={(e) => {
               setDepartment(e.target.value as RequestDepartment)
-              setAssigneeId('') // il reparto è cambiato: l'assegnatario scelto prima potrebbe non farne più parte
+              setAssignments([]) // il reparto è cambiato: le persone scelte prima potrebbero non farne più parte
             }}
           >
             {DEPARTMENTS.map((d) => (
@@ -566,28 +618,26 @@ function NewRequestForm({
           </select>
         </div>
       </div>
-      <div className="field-row-2">
-        <div className="field-row">
-          <label className="field-label">Assegna a (facoltativo)</label>
-          <select value={assigneeId} onChange={(e) => setAssigneeId(e.target.value)}>
-            <option value="">— Solo reparto, nessuna persona —</option>
-            {peopleInDepartment.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.full_name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div className="field-row">
-          <label className="field-label">Scadenza (facoltativa)</label>
-          <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
-        </div>
+      <div className="field-row">
+        <label className="field-label">Scadenza (facoltativa)</label>
+        <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+        <span className="muted">
+          Usata se non assegni la richiesta a nessuno qui sotto, o come scadenza di partenza per chi non ne
+          imposta una propria.
+        </span>
       </div>
       <RefPicker table={refTable} refId={refId} onChangeTable={setRefTable} onChangeId={setRefId} />
       <div className="field-row">
         <label className="field-label">Dettagli</label>
         <textarea className="note-field" value={body} onChange={(e) => setBody(e.target.value)} />
       </div>
+      {/* Coinvolgere più persone (richiesta di Andrea, nov 2026: "come nei
+          leeds, scelta libera e multipla") — stesso componente già usato in
+          Pipeline/Acquisti/Ricerca: una richiesta separata per ciascuna
+          persona scelta, ognuna con il proprio testo ed eventuale scadenza
+          (vedi handleSubmit più sotto). Senza nessuna scelta qui, si crea
+          comunque UNA sola richiesta, assegnata al solo reparto. */}
+      <ActivityAssignment profiles={peopleInDepartment} assignments={assignments} onChange={setAssignments} />
       <div className="field-row">
         <label className="field-label">Allegato (facoltativo — JPEG, Word, PDF o Excel)</label>
         {attachmentUrl ? (

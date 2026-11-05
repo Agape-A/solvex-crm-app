@@ -485,6 +485,12 @@ export interface Request {
   ref_id: string | null
   body: string
   due_date: string | null
+  // Scadenza ORIGINALE, fissata una sola volta alla creazione e mai più
+  // modificabile (lo garantisce un trigger, vedi
+  // 0062_scadenza_richieste.sql) — "due_date" sopra resta invece libero di
+  // essere posticipato, richiesta di Andrea, nov 2026: "aggiornare la
+  // scadenza... tenendo sempre traccia della prima".
+  due_date_original: string | null
   source_email_id: string | null
   tags: string[]
   // Allegato facoltativo (JPEG, Word, PDF o Excel — richiesta di Andrea,

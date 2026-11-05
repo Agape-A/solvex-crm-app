@@ -317,6 +317,10 @@ a.tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border
   padding: 0 0 14px; font-family: inherit;
 }
 .detail-back-btn svg { width: 16px; height: 16px; }
+/* Riga sopra il dettaglio di una richiesta: "Torna all'elenco" (solo
+   mobile, come sopra) + "Stampa" (richiesta di Andrea, nov 2026), sempre
+   visibile su qualunque schermo. */
+.request-detail-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 8px; }
 .eyebrow { font-size: 11px; text-transform: uppercase; letter-spacing: .05em; color: var(--accent); font-weight: 700; margin-bottom: 6px; }
 .stage-btn-row { display: flex; gap: 6px; flex-wrap: wrap; }
 .stage-btn {
@@ -1129,4 +1133,15 @@ a.client-deal-row:hover { background: var(--surface-2); border-radius: 6px; }
 .report-people-table tbody tr:last-child td,
 .report-people-table tbody tr:last-child th {
   border-bottom: none;
+}
+
+/* Tasto "Stampa" sulla scheda di una richiesta (richiesta di Andrea, nov
+   2026): alla stampa, nasconde tutta la pagina tranne il pannello della
+   richiesta aperta (.request-print-area) e i controlli che non ha senso
+   stampare (.no-print, es. il tasto Stampa stesso). */
+@media print {
+  body * { visibility: hidden; }
+  .request-print-area, .request-print-area * { visibility: visible; }
+  .request-print-area { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none; border: none; }
+  .no-print { display: none !important; }
 }
