@@ -230,10 +230,6 @@ export function Requests() {
     loadRequests()
   }
 
-  function peopleInDepartment(department: RequestDepartment) {
-    return profiles.filter((p) => p.department === department)
-  }
-
   return (
     <div className="view">
       <div className="view-head">
@@ -447,15 +443,14 @@ export function Requests() {
                   value={selected.assignee_id ?? ''}
                   onChange={(e) => updateAssignee(selected, e.target.value)}
                 >
-                  <option value="">— Nessuno (solo reparto {selected.department}) —</option>
-                  {peopleInDepartment(selected.department).map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.full_name}
-                    </option>
-                  ))}
-                  {peopleInDepartment(selected.department).length === 0 && (
-                    <option disabled>Nessuno collegato al reparto {selected.department} ancora</option>
-                  )}
+                  <option value="">— Nessuno —</option>
+                  {[...profiles]
+                    .sort((a, b) => a.full_name.localeCompare(b.full_name))
+                    .map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.full_name}
+                      </option>
+                    ))}
                 </select>
               </div>
 
@@ -497,8 +492,6 @@ function NewRequestForm({
   const [attachmentUrl, setAttachmentUrl] = useState<string | null>(null)
   const [attachmentName, setAttachmentName] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
-
-  const peopleInDepartment = profiles.filter((p) => p.department === department)
 
   async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
@@ -610,10 +603,7 @@ function NewRequestForm({
           <label className="field-label">Reparto</label>
           <select
             value={department}
-            onChange={(e) => {
-              setDepartment(e.target.value as RequestDepartment)
-              setAssignments([]) // il reparto è cambiato: le persone scelte prima potrebbero non farne più parte
-            }}
+            onChange={(e) => setDepartment(e.target.value as RequestDepartment)}
           >
             {DEPARTMENTS.map((d) => (
               <option key={d} value={d}>
@@ -652,7 +642,7 @@ function NewRequestForm({
           persona scelta, ognuna con il proprio testo ed eventuale scadenza
           (vedi handleSubmit più sotto). Senza nessuna scelta qui, si crea
           comunque UNA sola richiesta, assegnata al solo reparto. */}
-      <ActivityAssignment profiles={peopleInDepartment} assignments={assignments} onChange={setAssignments} />
+      <ActivityAssignment profiles={profiles} assignments={assignments} onChange={setAssignments} />
       <div className="field-row">
         <label className="field-label">Allegato (facoltativo — JPEG, Word, PDF o Excel)</label>
         {attachmentUrl ? (
