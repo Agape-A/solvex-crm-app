@@ -547,21 +547,36 @@ function NewRequestForm({
     // Una o più persone scelte: una richiesta SEPARATA per ciascuna, con il
     // proprio testo aggiunto ai "Dettagli" comuni e la propria scadenza (o
     // quella comune qui sopra, se non ne ha impostata una) — stesso
-    // meccanismo già in uso per i leeds in Pipeline.tsx.
-    const rows =
-      assignments.length === 0
-        ? [{ ...basePayload, body, due_date: dueDate || null, assignee_id: null }]
-        : assignments.map((a) => ({
-            ...basePayload,
-            body: body.trim() ? `${body.trim()}\n\n${a.task}` : a.task,
-            due_date: a.dueDate || dueDate || null,
-            assignee_id: a.userId,
-          }))
-
-    const { error } = await supabase.from('requests').insert(rows)
+    // meccanismo già in uso per i leeds in Pipeline.tsx. Un insert per
+    // riga, non un array di righe passato in blocco a .insert(): un array
+    // costruito da un ternario con "assignee_id: null" in un ramo e
+    // "assignee_id: a.userId" nell'altro faceva inferire a TypeScript due
+    // tipi diversi invece di un unico "string | null", e tsc rifiutava la
+    // build (visto solo da Vercel: non potevo girare tsc da qui per
+    // accorgermene prima).
+    let errorMessage: string | null = null
+    if (assignments.length === 0) {
+      const { error } = await supabase
+        .from('requests')
+        .insert({ ...basePayload, body, due_date: dueDate || null, assignee_id: null })
+      errorMessage = error?.message ?? null
+    } else {
+      for (const a of assignments) {
+        const { error } = await supabase.from('requests').insert({
+          ...basePayload,
+          body: body.trim() ? `${body.trim()}\n\n${a.task}` : a.task,
+          due_date: a.dueDate || dueDate || null,
+          assignee_id: a.userId,
+        })
+        if (error) {
+          errorMessage = error.message
+          break
+        }
+      }
+    }
     setSaving(false)
-    if (error) {
-      alert('Non è stato possibile creare la richiesta: ' + error.message)
+    if (errorMessage) {
+      alert('Non è stato possibile creare la richiesta: ' + errorMessage)
       return
     }
     onCreated()
