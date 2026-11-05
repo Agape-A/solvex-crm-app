@@ -274,9 +274,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     channel
       .on('presence', { event: 'sync' }, () => {
-        setOnlineUserIds(new Set(Object.keys(channel.presenceState())))
+        const keys = Object.keys(channel.presenceState())
+        // Log temporaneo (nov 2026) per capire perché il pallino "online"
+        // non compariva nei test di Andrea — da togliere una volta chiarito.
+        console.log('[presence] sync, utenti online:', keys, '(io sono:', profile.id, ')')
+        setOnlineUserIds(new Set(keys))
       })
-      .subscribe((status) => {
+      .subscribe((status, err) => {
+        console.log('[presence] stato canale:', status, err ?? '')
         if (status === 'SUBSCRIBED') {
           channel.track({ online_at: new Date().toISOString() })
         }
