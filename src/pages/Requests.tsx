@@ -70,6 +70,10 @@ export function Requests() {
   const [showForm, setShowForm] = useState(false)
   const [loading, setLoading] = useState(true)
   const [refLabel, setRefLabel] = useState<string | null>(null)
+  // Bozza di posticipo scadenza: nessun aggiornamento diretto sulla data,
+  // serve sempre una nota obbligatoria (richiesta di Andrea, nov 2026) —
+  // vedi updateDueDate più sotto, che la salva come commento collegato.
+  const [dueDateDraft, setDueDateDraft] = useState<{ date: string; note: string } | null>(null)
 
   function clientFor(request: Request) {
     return request.client_id ? clients.find((c) => c.id === request.client_id) ?? null : null
@@ -84,6 +88,10 @@ export function Requests() {
       describeRef(selected.ref_table, selected.ref_id).then(setRefLabel)
     }
   }, [selected?.ref_table, selected?.ref_id])
+
+  useEffect(() => {
+    setDueDateDraft(null)
+  }, [selected?.id])
 
   async function loadRequests() {
     setLoading(true)
@@ -216,9 +224,12 @@ export function Requests() {
   // Posticipare la scadenza senza perdere quella originale (richiesta di
   // Andrea, nov 2026) — "due_date" qui si aggiorna liberamente, mentre
   // "due_date_original" resta fissa alla prima data impostata: ce lo
-  // garantisce un trigger lato database (0062_richieste_scadenza_assegnazione_pipeline.sql), non
-  // serve nessun controllo in più qui.
-  async function updateDueDate(request: Request, dueDate: string) {
+  // garantisce un trigger lato database (0062_richieste_scadenza_assegnazione_pipeline.sql).
+  // Da nov 2026 (ancora Andrea) il posticipo richiede sempre una nota: si
+  // salva come commento collegato alla richiesta (record_comments), così
+  // resta una traccia leggibile del motivo e non solo delle due date.
+  async function updateDueDate(request: Request, dueDate: string, note: string) {
+    if (!note.trim()) return
     const { error } = await supabase
       .from('requests')
       .update({ due_date: dueDate || null })
@@ -227,6 +238,19 @@ export function Requests() {
       alert('Non è stato possibile aggiornare la scadenza: ' + error.message)
       return
     }
+    if (profile) {
+      const oldLabel = request.due_date ? new Date(request.due_date).toLocaleDateString('it-IT') : 'nessuna'
+      const newLabel = dueDate ? new Date(dueDate).toLocaleDateString('it-IT') : 'nessuna'
+      await supabase.from('record_comments').insert({
+        ref_table: 'requests',
+        ref_id: request.id,
+        author_id: profile.id,
+        body: `Scadenza posticipata da ${oldLabel} a ${newLabel}: ${note.trim()}`,
+        recipient_id: request.assignee_id,
+        recipient_department: request.assignee_id ? null : request.department,
+      })
+    }
+    setDueDateDraft(null)
     loadRequests()
   }
 
@@ -387,15 +411,46 @@ export function Requests() {
               <p className="muted">{selected.body}</p>
               <div className="field-row">
                 <label className="field-label">Scadenza</label>
-                <input
-                  type="date"
-                  value={selected.due_date ? selected.due_date.slice(0, 10) : ''}
-                  onChange={(e) => updateDueDate(selected, e.target.value)}
-                />
+                <span>{selected.due_date ? new Date(selected.due_date).toLocaleDateString('it-IT') : 'Nessuna'}</span>
                 {selected.due_date_original && selected.due_date_original !== selected.due_date && (
                   <span className="muted">
                     Scadenza originale: {new Date(selected.due_date_original).toLocaleDateString('it-IT')}
                   </span>
+                )}
+                {dueDateDraft === null ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() =>
+                      setDueDateDraft({ date: selected.due_date ? selected.due_date.slice(0, 10) : '', note: '' })
+                    }
+                  >
+                    {selected.due_date ? 'Posticipa scadenza' : 'Imposta scadenza'}
+                  </button>
+                ) : (
+                  <div className="due-date-draft">
+                    <input
+                      type="date"
+                      value={dueDateDraft.date}
+                      onChange={(e) => setDueDateDraft({ ...dueDateDraft, date: e.target.value })}
+                    />
+                    <input
+                      value={dueDateDraft.note}
+                      onChange={(e) => setDueDateDraft({ ...dueDateDraft, note: e.target.value })}
+                      placeholder="Motivo del posticipo (obbligatorio)"
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={!dueDateDraft.note.trim()}
+                      onClick={() => updateDueDate(selected, dueDateDraft.date, dueDateDraft.note)}
+                    >
+                      Salva
+                    </button>
+                    <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDueDateDraft(null)}>
+                      Annulla
+                    </button>
+                  </div>
                 )}
               </div>
               {clientFor(selected) && (
