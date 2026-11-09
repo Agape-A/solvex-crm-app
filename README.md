@@ -168,6 +168,13 @@ database.
      modificarla anche se l'ha mandata a un reparto diverso dal proprio;
      un lead creato dal dirigente non resta più invisibile a tutto il
      commerciale in Pipeline clienti).
+   - `supabase/migrations/0063_fix_badge_push_dirigente.sql` (il numero
+     sul pallino rosso dell'icona dell'app, mandato con le notifiche push
+     ad app chiusa, per un account dirigente/amministrazione poteva
+     risultare molto più alto del reale — contava i messaggi di TUTTI i
+     canali di reparto invece del solo proprio, un bug rimasto per errore
+     in questa funzione quando l'equivalente usato dall'app aperta era
+     già stato corretto in 0060).
    Se non li hai già eseguiti con `supabase db push` o incollandoli a mano.
 2. Supabase → **Edge Functions** → **Deploy a new function** → **Via
    Editor** → nome esatto `manage-users`.

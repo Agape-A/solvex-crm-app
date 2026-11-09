@@ -255,7 +255,14 @@ export function Layout({ children }: { children: ReactNode }) {
               >
                 <Icon className="nav-item-icon" />
                 <span className="nav-item-label">{item.label}</span>
-                {badgeCount > 0 && <span className="nav-badge">{badgeCount > 99 ? '99+' : badgeCount}</span>}
+                {badgeCount > 0 && (
+                  <span
+                    className="nav-badge"
+                    title={item.badgeKey === 'chat' ? 'Messaggi non letti' : 'Richieste nuove da gestire'}
+                  >
+                    {badgeCount > 99 ? '99+' : badgeCount}
+                  </span>
+                )}
                 {commentCount > 0 && (
                   <span className="nav-badge nav-badge-comments" title="Commenti non letti indirizzati a te">
                     {commentCount > 99 ? '99+' : commentCount}

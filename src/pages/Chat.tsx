@@ -10,6 +10,7 @@ import {
   type ChatChannel,
   type ChatMessage,
   type ChatFeedItem,
+  type CommentRefTable,
   type RecordComment,
   type Profile,
   type RequestDepartment,
@@ -98,7 +99,7 @@ function timeLabel(iso: string): string {
 }
 
 export function Chat() {
-  const { profile, markChatSeen, onlineUserIds } = useAuth()
+  const { profile, markChatSeen, markCommentsSeen, onlineUserIds } = useAuth()
   const [conversation, setConversation] = useState<ActiveConversation>({ kind: 'channel', channel: 'generale' })
   // Su telefono la pagina si apre sempre sulla lista di canali/persone (come
   // WhatsApp/Telegram, richiesta di Andrea ott 2026) — questa chat si apre a
@@ -324,6 +325,16 @@ export function Chat() {
     // spariscono "da soli" su conversazioni mai aperte).
     if (!profile) return
     markChatSeen(channelKey(conversation)).then(() => refreshUnread())
+
+    const commentRefs = new Map<string, { table: CommentRefTable; id: string }>()
+    for (const item of items) {
+      if (item.source === 'comment' && item.ref_table && item.ref_id) {
+        commentRefs.set(`${item.ref_table}:${item.ref_id}`, { table: item.ref_table as CommentRefTable, id: item.ref_id })
+      }
+    }
+    for (const ref of commentRefs.values()) {
+      markCommentsSeen(ref.table, ref.id)
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [items.length, conversation.kind, conversation.kind === 'channel' ? conversation.channel : conversation.userId])
 
