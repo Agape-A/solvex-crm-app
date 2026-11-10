@@ -190,6 +190,14 @@ export function Pipeline() {
   // proprietario — il vero controllo resta comunque lato server
   // (0003_triggers.sql, enforce_deal_update_permissions).
   const canEditFields = profile?.role === 'dirigente' || profile?.department === 'commerciale'
+  // Il tecnico può ora portare una trattativa avanti fino a vinta/persa
+  // (richiesta di Andrea, nov 2026), ma non toccare cliente/prodotto/
+  // valore/proprietario/prossima azione né "richiede validazione
+  // tecnica" (quelli restano dietro canEditFields sopra) — vedi anche il
+  // trigger enforce_deal_update_permissions
+  // (0064_tecnico_chiude_trattative.sql), che blocca lato database tutto
+  // il resto comunque, anche se qui si saltasse questo controllo.
+  const canChangeStage = canEditFields || profile?.department === 'tecnico'
   // "Utente" (ex "Proprietario") è sempre e solo chi crea la trattativa —
   // nessuno può più cambiarlo a mano, nemmeno dirigente/amministrazione
   // (richiesta di Andrea, ott 2026): niente più menu di riassegnazione da
@@ -441,7 +449,7 @@ export function Pipeline() {
                     key={stage.id}
                     className={'kanban-col' + (dragOverStage === stage.id ? ' drag-over' : '')}
                     onDragOver={(e) => {
-                      if (!canEditFields || !draggedId) return
+                      if (!canChangeStage || !draggedId) return
                       e.preventDefault()
                       setDragOverStage(stage.id)
                     }}
@@ -449,7 +457,7 @@ export function Pipeline() {
                     onDrop={(e) => {
                       e.preventDefault()
                       setDragOverStage(null)
-                      if (!canEditFields) return
+                      if (!canChangeStage) return
                       const id = e.dataTransfer.getData('text/plain')
                       const deal = deals.find((d) => d.id === id)
                       if (deal) updateStage(deal, stage.id)
@@ -479,7 +487,8 @@ export function Pipeline() {
                           saving={savingId === deal.id}
                           highlighted={highlightedId === deal.id}
                           canEditFields={canEditFields}
-                          canDrag={canEditFields}
+                          canChangeStage={canChangeStage}
+                          canDrag={canChangeStage}
                           expanded={expandedId === deal.id}
                           owners={ownerOptions}
                           onToggleExpand={() => setExpandedId((id) => (id === deal.id ? null : deal.id))}
@@ -557,6 +566,7 @@ export function Pipeline() {
                           <DealDetails
                             deal={deal}
                             canEditFields={canEditFields}
+                            canChangeStage={canChangeStage}
                             owners={ownerOptions}
                             onChangeStage={(s) => updateStage(deal, s)}
                             onChangeNote={(note) => updateNote(deal, note)}
@@ -964,6 +974,7 @@ export function ActivityDetailsView({ details }: { details: DealActivityDetails 
 function DealDetails({
   deal,
   canEditFields,
+  canChangeStage,
   compact = false,
   owners,
   onChangeStage,
@@ -972,6 +983,7 @@ function DealDetails({
 }: {
   deal: Deal
   canEditFields: boolean
+  canChangeStage: boolean
   compact?: boolean
   owners: Profile[]
   onChangeStage: (s: DealStage) => void
@@ -980,7 +992,7 @@ function DealDetails({
 }) {
   return (
     <div className="kanban-card-expanded" onClick={(e) => e.stopPropagation()}>
-      <StagePath deal={deal} canEdit={canEditFields} compact={compact} onChangeStage={onChangeStage} />
+      <StagePath deal={deal} canEdit={canChangeStage} compact={compact} onChangeStage={onChangeStage} />
       <ActivityDetailsView details={deal.activity_details} />
       {deal.proposal_type && (
         <div className="activity-fields-block">
@@ -1051,6 +1063,7 @@ function DealCard({
   saving,
   highlighted,
   canEditFields,
+  canChangeStage,
   canDrag,
   expanded,
   owners,
@@ -1068,6 +1081,7 @@ function DealCard({
   saving: boolean
   highlighted: boolean
   canEditFields: boolean
+  canChangeStage: boolean
   canDrag: boolean
   expanded: boolean
   owners: Profile[]
@@ -1079,7 +1093,7 @@ function DealCard({
   onChangeTechValidation: (value: boolean) => void
 }) {
   const next = nextPathStage(deal.stage)
-  const showQuickActions = canEditFields && deal.stage !== 'vinto' && deal.stage !== 'perso'
+  const showQuickActions = canChangeStage && deal.stage !== 'vinto' && deal.stage !== 'perso'
 
   return (
     <div
@@ -1141,6 +1155,7 @@ function DealCard({
         <DealDetails
           deal={deal}
           canEditFields={canEditFields}
+          canChangeStage={canChangeStage}
           compact
           owners={owners}
           onChangeStage={onChangeStage}

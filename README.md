@@ -175,6 +175,12 @@ database.
      canali di reparto invece del solo proprio, un bug rimasto per errore
      in questa funzione quando l'equivalente usato dall'app aperta era
      già stato corretto in 0060).
+   - `supabase/migrations/0064_tecnico_chiude_trattative.sql` (il
+     reparto tecnico può ora portare una propria trattativa — o una che
+     richiede validazione tecnica — fino a "vinto" o "perso", non solo
+     modificare il campo note; resta invariato tutto il resto che il
+     tecnico non può toccare: cliente, prodotto, valore, proprietario,
+     prossima azione, "richiede validazione tecnica").
    Se non li hai già eseguiti con `supabase db push` o incollandoli a mano.
 2. Supabase → **Edge Functions** → **Deploy a new function** → **Via
    Editor** → nome esatto `manage-users`.
