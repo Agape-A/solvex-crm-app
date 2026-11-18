@@ -999,10 +999,49 @@ function cellToText(value: unknown): string {
   return String(value).trim()
 }
 
+// Gli errori che arrivano da Supabase/Postgres non sono istanze di Error ma
+// semplici oggetti ({ message, details, hint, code }): "err instanceof
+// Error" è quindi sempre falso e String(err) su un oggetto produce
+// "[object Object]", nascondendo il vero motivo del fallimento. Qui
+// estraiamo il messaggio reale quando c'è.
+function describeSupabaseError(err: unknown): string {
+  if (err instanceof Error) return err.message
+  if (err && typeof err === 'object') {
+    const e = err as { message?: unknown; details?: unknown; hint?: unknown; code?: unknown }
+    const parts = [e.message, e.details, e.hint].filter((p): p is string => typeof p === 'string' && p.length > 0)
+    if (parts.length > 0) {
+      return parts.join(' — ') + (typeof e.code === 'string' ? ` (codice ${e.code})` : '')
+    }
+  }
+  return String(err)
+}
+
 async function insertInChunks(rows: ImportedRow[], chunkSize = 300) {
+  // Se il file ha più righe con lo stesso "Codice cliente ERP" (external_id),
+  // un upsert che le contiene entrambe nello stesso blocco fa fallire
+  // Postgres con "ON CONFLICT DO UPDATE command cannot affect row a second
+  // time": un INSERT non può toccare due volte la stessa riga in conflitto.
+  // Capita spesso con export da gestionali (stesso cliente con più
+  // referenti/righe). Qui teniamo solo l'ultima occorrenza di ciascun
+  // codice prima di scrivere; le righe senza codice (external_id nullo) non
+  // sono mai coinvolte, perché due NULL non generano mai un conflitto.
+  const lastIndexByExternalId = new Map<string, number>()
+  const deduped: ImportedRow[] = []
+  for (const row of rows) {
+    if (row.external_id) {
+      const existingIndex = lastIndexByExternalId.get(row.external_id)
+      if (existingIndex !== undefined) {
+        deduped[existingIndex] = row
+        continue
+      }
+      lastIndexByExternalId.set(row.external_id, deduped.length)
+    }
+    deduped.push(row)
+  }
+
   let written = 0
-  for (let i = 0; i < rows.length; i += chunkSize) {
-    const chunk = rows.slice(i, i + chunkSize)
+  for (let i = 0; i < deduped.length; i += chunkSize) {
+    const chunk = deduped.slice(i, i + chunkSize)
     // upsert su external_id: righe con external_id nullo non generano mai un
     // conflitto (due NULL non sono mai "uguali" per un vincolo di unicità),
     // quindi funziona sia per la prima importazione sia per gli aggiornamenti.
@@ -1122,7 +1161,7 @@ function ImportClientsPanel({ profile, onImported }: { profile: Profile; onImpor
     } catch (err) {
       alert(
         'Importazione interrotta per un errore: ' +
-          (err instanceof Error ? err.message : String(err)) +
+          describeSupabaseError(err) +
           '. Nessuna riga oltre quelle già scritte è stata importata: puoi correggere il file e riprovare, le righe già importate verranno aggiornate invece che duplicate solo se hai mappato un codice cliente ERP.'
       )
     }
