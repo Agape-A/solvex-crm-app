@@ -181,6 +181,13 @@ database.
      modificare il campo note; resta invariato tutto il resto che il
      tecnico non può toccare: cliente, prodotto, valore, proprietario,
      prossima azione, "richiede validazione tecnica").
+   - `supabase/migrations/0065_audit_sicurezza.sql` (due correzioni
+     dall'analisi di sicurezza di nov 2026: un account "operatore" poteva
+     promuoversi da solo a "dirigente" aggiornando il proprio profilo con
+     una chiamata diretta alle API, bypassando l'interfaccia; la tabella
+     "deal_deadline_notifications" era priva di qualunque restrizione di
+     accesso — vedi il documento consegnato per i dettagli e tutto il
+     resto emerso dall'analisi, non ancora corretto).
    Se non li hai già eseguiti con `supabase db push` o incollandoli a mano.
 2. Supabase → **Edge Functions** → **Deploy a new function** → **Via
    Editor** → nome esatto `manage-users`.
