@@ -171,13 +171,22 @@ export function Dashboard() {
               </Link>
             )}
             {showRequestsTile && dueRequests.length > 0 && (
-              <Link to="/richieste" className="dash-alert-group">
-                <div className="dash-alert-head">
+              // Prima l'intero blocco era un unico Link verso "/richieste":
+              // la pagina Richieste apre di default solo lo stato "Nuove",
+              // quindi se una di queste richieste era già passata a "In
+              // lavorazione" il link non la mostrava mai, risultando "non
+              // riporta a quelle indicate come scadute" (segnalato da
+              // Andrea, nov 2026). Ora ogni riga porta dritta a quella
+              // specifica richiesta (stesso meccanismo "?id=" già usato dal
+              // Calendario e dalla Chat), e il titolo porta a Richieste con
+              // tutti i filtri aperti ("?scadenza=1").
+              <div className="dash-alert-group">
+                <Link to="/richieste?scadenza=1" className="dash-alert-head">
                   <span className="dash-alert-dot dash-alert-dot-warning" />
                   Richieste in scadenza <span className="muted">· {dueRequests.length}</span>
-                </div>
+                </Link>
                 {dueRequests.slice(0, 4).map((r) => (
-                  <div className="dash-alert-row" key={r.id}>
+                  <Link to={`/richieste?id=${r.id}`} className="dash-alert-row" key={r.id}>
                     <span>{r.subject}</span>
                     <span className="muted">
                       {new Date(r.due_date as string) < new Date(new Date().toDateString())
@@ -185,9 +194,9 @@ export function Dashboard() {
                         : 'scade il '}
                       {new Date(r.due_date as string).toLocaleDateString('it-IT')}
                     </span>
-                  </div>
+                  </Link>
                 ))}
-              </Link>
+              </div>
             )}
             {todayAppointments.length > 0 && (
               <Link to="/calendario" className="dash-alert-group">

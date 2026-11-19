@@ -226,14 +226,18 @@ a.tile:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); border
 .dash-alert-group { display: block; text-decoration: none; color: inherit; }
 .dash-alert-head {
   display: flex; align-items: center; gap: 7px; font-weight: 700; font-size: 13px; margin-bottom: 6px; color: var(--ink);
+  text-decoration: none;
 }
+.dash-alert-head:hover { text-decoration: underline; }
 .dash-alert-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; }
 .dash-alert-dot-critical { background: var(--critical); }
 .dash-alert-dot-warning { background: var(--warning); }
 .dash-alert-dot-info { background: var(--accent); }
 .dash-alert-row {
   display: flex; justify-content: space-between; gap: 10px; padding: 5px 0 5px 15px; font-size: 12.5px;
+  text-decoration: none; color: inherit;
 }
+.dash-alert-row:hover { color: var(--accent); }
 
 /* ---- pipeline ---- */
 .tag {

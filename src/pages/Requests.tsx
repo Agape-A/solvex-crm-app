@@ -165,6 +165,23 @@ export function Requests() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, requests])
 
+  // Dal titolo del riquadro "Richieste in scadenza" nella Dashboard
+  // (non da una riga specifica, quella usa "?id=" qui sopra): porta qui con
+  // "?scadenza=1" solo per togliere i filtri di stato/reparto/collegamento/
+  // tipo, perché di default questa pagina mostra solo le "Nuove" e quindi
+  // una scadenza già passata a "In lavorazione" restava nascosta — era
+  // esattamente il motivo per cui il link "non riportava a quelle indicate
+  // come scadute" (segnalato da Andrea, nov 2026).
+  useEffect(() => {
+    if (searchParams.get('scadenza') !== '1') return
+    setStatusFilter('tutte')
+    setDepartmentFilter('tutti')
+    setRefTableFilter('tutti')
+    setTypeFilter('tutti')
+    setSearchParams({}, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams])
+
   // I filtri secondari (reparto, collegamento, interna/esterna) si applicano
   // insieme a quello di stato — i conteggi sulle schede Nuova/In
   // lavorazione/... qui sotto riflettono già gli altri filtri attivi, così
