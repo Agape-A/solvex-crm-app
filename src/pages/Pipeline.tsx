@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type DragEvent, type FormEvent, type ReactNode } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { openAttachment } from '../lib/attachments'
 import { useAuth } from '../context/AuthContext'
 import { CommentThread } from '../components/CommentThread'
 import { ActivityAssignment, createActivityAssignments } from '../components/ActivityAssignment'
@@ -854,7 +855,10 @@ export function ActivityDetailsView({ details }: { details: DealActivityDetails 
           {details.mansione_referente && <span><strong>Mansione Referente:</strong> {details.mansione_referente}</span>}
           {details.attachment_url && (
             <span>
-              <strong>Allegato:</strong> <a href={details.attachment_url} target="_blank" rel="noreferrer">📎 {details.attachment_name}</a>
+              <strong>Allegato:</strong>{' '}
+              <button type="button" className="link-button" onClick={() => openAttachment('deal-attachments', details.attachment_url)}>
+                📎 {details.attachment_name}
+              </button>
             </span>
           )}
         </div>
@@ -876,7 +880,10 @@ export function ActivityDetailsView({ details }: { details: DealActivityDetails 
           {details.mansione_referente && <span><strong>Mansione Referente:</strong> {details.mansione_referente}</span>}
           {details.attachment_url && (
             <span>
-              <strong>Allegato:</strong> <a href={details.attachment_url} target="_blank" rel="noreferrer">📎 {details.attachment_name}</a>
+              <strong>Allegato:</strong>{' '}
+              <button type="button" className="link-button" onClick={() => openAttachment('deal-attachments', details.attachment_url)}>
+                📎 {details.attachment_name}
+              </button>
             </span>
           )}
         </div>
@@ -900,7 +907,10 @@ export function ActivityDetailsView({ details }: { details: DealActivityDetails 
           {details.descrizione_reclamo && <span><strong>Descrizione reclamo:</strong> {details.descrizione_reclamo}</span>}
           {details.attachment_url && (
             <span>
-              <strong>Allegato:</strong> <a href={details.attachment_url} target="_blank" rel="noreferrer">📎 {details.attachment_name}</a>
+              <strong>Allegato:</strong>{' '}
+              <button type="button" className="link-button" onClick={() => openAttachment('deal-attachments', details.attachment_url)}>
+                📎 {details.attachment_name}
+              </button>
             </span>
           )}
           {details.prossimi_passi && <span><strong>Prossimi passi:</strong> {details.prossimi_passi}</span>}
@@ -924,7 +934,10 @@ export function ActivityDetailsView({ details }: { details: DealActivityDetails 
           {details.mansione_referente && <span><strong>Mansione Referente:</strong> {details.mansione_referente}</span>}
           {details.attachment_url && (
             <span>
-              <strong>Allegato:</strong> <a href={details.attachment_url} target="_blank" rel="noreferrer">📎 {details.attachment_name}</a>
+              <strong>Allegato:</strong>{' '}
+              <button type="button" className="link-button" onClick={() => openAttachment('deal-attachments', details.attachment_url)}>
+                📎 {details.attachment_name}
+              </button>
             </span>
           )}
         </div>
@@ -942,12 +955,17 @@ export function ActivityDetailsView({ details }: { details: DealActivityDetails 
           {details.scheda_tecnica_url && (
             <span>
               <strong>Scheda tecnica:</strong>{' '}
-              <a href={details.scheda_tecnica_url} target="_blank" rel="noreferrer">📎 {details.scheda_tecnica_name}</a>
+              <button type="button" className="link-button" onClick={() => openAttachment('deal-attachments', details.scheda_tecnica_url)}>
+                📎 {details.scheda_tecnica_name}
+              </button>
             </span>
           )}
           {details.msds_url && (
             <span>
-              <strong>MSDS:</strong> <a href={details.msds_url} target="_blank" rel="noreferrer">📎 {details.msds_name}</a>
+              <strong>MSDS:</strong>{' '}
+              <button type="button" className="link-button" onClick={() => openAttachment('deal-attachments', details.msds_url)}>
+                📎 {details.msds_name}
+              </button>
             </span>
           )}
           {details.tipo_analisi && <span><strong>Descrizione analisi:</strong> {TIPO_ANALISI_LABELS[details.tipo_analisi]}</span>}
@@ -1325,8 +1343,7 @@ function NewDealForm({
       alert("Non è stato possibile caricare l'allegato: " + error.message)
       return
     }
-    const { data } = supabase.storage.from('deal-attachments').getPublicUrl(path)
-    setAttachmentUrl(data.publicUrl)
+    setAttachmentUrl(path)
     setAttachmentName(file.name)
   }
 
@@ -1346,8 +1363,7 @@ function NewDealForm({
       alert('Non è stato possibile caricare la scheda tecnica: ' + error.message)
       return
     }
-    const { data } = supabase.storage.from('deal-attachments').getPublicUrl(path)
-    setSchedaTecnicaUrl(data.publicUrl)
+    setSchedaTecnicaUrl(path)
     setSchedaTecnicaName(file.name)
   }
 
@@ -1363,8 +1379,7 @@ function NewDealForm({
       alert('Non è stato possibile caricare la MSDS: ' + error.message)
       return
     }
-    const { data } = supabase.storage.from('deal-attachments').getPublicUrl(path)
-    setMsdsUrl(data.publicUrl)
+    setMsdsUrl(path)
     setMsdsName(file.name)
   }
 
@@ -1784,7 +1799,7 @@ function NewDealForm({
             <label className="field-label">Allega file (facoltativo)</label>
             {attachmentUrl ? (
               <div className="marketing-attachment-row">
-                <a href={attachmentUrl} target="_blank" rel="noreferrer">📎 {attachmentName}</a>
+                <button type="button" className="link-button" onClick={() => openAttachment('deal-attachments', attachmentUrl)}>📎 {attachmentName}</button>
                 <button type="button" className="btn btn-ghost" onClick={() => { setAttachmentUrl(null); setAttachmentName(null) }}>
                   Rimuovi
                 </button>
@@ -1845,7 +1860,7 @@ function NewDealForm({
             <label className="field-label">Allega file (facoltativo)</label>
             {attachmentUrl ? (
               <div className="marketing-attachment-row">
-                <a href={attachmentUrl} target="_blank" rel="noreferrer">📎 {attachmentName}</a>
+                <button type="button" className="link-button" onClick={() => openAttachment('deal-attachments', attachmentUrl)}>📎 {attachmentName}</button>
                 <button type="button" className="btn btn-ghost" onClick={() => { setAttachmentUrl(null); setAttachmentName(null) }}>
                   Rimuovi
                 </button>
@@ -1938,7 +1953,7 @@ function NewDealForm({
             <label className="field-label">Allega file (facoltativo)</label>
             {attachmentUrl ? (
               <div className="marketing-attachment-row">
-                <a href={attachmentUrl} target="_blank" rel="noreferrer">📎 {attachmentName}</a>
+                <button type="button" className="link-button" onClick={() => openAttachment('deal-attachments', attachmentUrl)}>📎 {attachmentName}</button>
                 <button type="button" className="btn btn-ghost" onClick={() => { setAttachmentUrl(null); setAttachmentName(null) }}>
                   Rimuovi
                 </button>
@@ -2016,7 +2031,7 @@ function NewDealForm({
             <label className="field-label">Allega file (facoltativo)</label>
             {attachmentUrl ? (
               <div className="marketing-attachment-row">
-                <a href={attachmentUrl} target="_blank" rel="noreferrer">📎 {attachmentName}</a>
+                <button type="button" className="link-button" onClick={() => openAttachment('deal-attachments', attachmentUrl)}>📎 {attachmentName}</button>
                 <button type="button" className="btn btn-ghost" onClick={() => { setAttachmentUrl(null); setAttachmentName(null) }}>
                   Rimuovi
                 </button>
@@ -2043,7 +2058,7 @@ function NewDealForm({
               <label className="field-label">Schede tecniche (facoltativo)</label>
               {schedaTecnicaUrl ? (
                 <div className="marketing-attachment-row">
-                  <a href={schedaTecnicaUrl} target="_blank" rel="noreferrer">📎 {schedaTecnicaName}</a>
+                  <button type="button" className="link-button" onClick={() => openAttachment('deal-attachments', schedaTecnicaUrl)}>📎 {schedaTecnicaName}</button>
                   <button
                     type="button"
                     className="btn btn-ghost"
@@ -2066,7 +2081,7 @@ function NewDealForm({
               <label className="field-label">MSDS (facoltativo)</label>
               {msdsUrl ? (
                 <div className="marketing-attachment-row">
-                  <a href={msdsUrl} target="_blank" rel="noreferrer">📎 {msdsName}</a>
+                  <button type="button" className="link-button" onClick={() => openAttachment('deal-attachments', msdsUrl)}>📎 {msdsName}</button>
                   <button type="button" className="btn btn-ghost" onClick={() => { setMsdsUrl(null); setMsdsName(null) }}>
                     Rimuovi
                   </button>

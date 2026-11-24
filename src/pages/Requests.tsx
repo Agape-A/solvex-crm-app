@@ -1,6 +1,7 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { openAttachment } from '../lib/attachments'
 import { useAuth } from '../context/AuthContext'
 import { CommentThread } from '../components/CommentThread'
 import { ActivityAssignment } from '../components/ActivityAssignment'
@@ -488,9 +489,9 @@ export function Requests() {
               )}
               {selected.attachment_url && (
                 <p className="muted">
-                  <a href={selected.attachment_url} target="_blank" rel="noreferrer">
+                  <button type="button" className="link-button" onClick={() => openAttachment('request-attachments', selected.attachment_url)}>
                     📎 {selected.attachment_name ?? 'Allegato'}
-                  </a>
+                  </button>
                 </p>
               )}
 
@@ -583,8 +584,7 @@ function NewRequestForm({
       alert("Non è stato possibile caricare l'allegato: " + error.message)
       return
     }
-    const { data } = supabase.storage.from('request-attachments').getPublicUrl(path)
-    setAttachmentUrl(data.publicUrl)
+    setAttachmentUrl(path)
     setAttachmentName(file.name)
   }
 
@@ -719,9 +719,9 @@ function NewRequestForm({
         <label className="field-label">Allegato (facoltativo — JPEG, Word, PDF o Excel)</label>
         {attachmentUrl ? (
           <div className="marketing-attachment-row">
-            <a href={attachmentUrl} target="_blank" rel="noreferrer">
+            <button type="button" className="link-button" onClick={() => openAttachment('request-attachments', attachmentUrl)}>
               📎 {attachmentName}
-            </a>
+            </button>
             <button
               type="button"
               className="btn btn-ghost"

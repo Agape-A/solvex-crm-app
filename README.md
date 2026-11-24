@@ -188,6 +188,15 @@ database.
      "deal_deadline_notifications" era priva di qualunque restrizione di
      accesso — vedi il documento consegnato per i dettagli e tutto il
      resto emerso dall'analisi, non ancora corretto).
+   - `supabase/migrations/0066_bucket_privati.sql` (altre due correzioni
+     dalla stessa analisi di sicurezza: gli allegati (clienti, trattative,
+     ricerca, marketing, fornitori, acquisti, richieste) erano salvati in
+     spazi di archiviazione pubblici — chiunque avesse indovinato o
+     intercettato un indirizzo poteva aprirlo senza aver fatto accesso;
+     ora sono privati e l'app genera un link temporaneo valido un'ora per
+     ogni apertura; sistemato anche un controllo permessi su trattative e
+     marketing rimasto agganciato a un vecchio nome di ruolo dopo la
+     semplificazione dei ruoli, che di fatto non verificava più nulla).
    Se non li hai già eseguiti con `supabase db push` o incollandoli a mano.
 2. Supabase → **Edge Functions** → **Deploy a new function** → **Via
    Editor** → nome esatto `manage-users`.

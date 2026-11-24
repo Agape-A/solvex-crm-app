@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from 'react'
 import { supabase } from '../lib/supabaseClient'
+import { openAttachment } from '../lib/attachments'
 import { useAuth } from '../context/AuthContext'
 import {
   MARKETING_SOURCE_LABELS,
@@ -451,9 +452,9 @@ export function Marketing() {
                 Lista: {lists.find((l) => l.id === camp.list_id)?.name ?? '— nessuna assegnata —'}
               </span>
               {camp.attachment_url && (
-                <a className="muted" href={camp.attachment_url} target="_blank" rel="noreferrer">
+                <button type="button" className="link-button muted" onClick={() => openAttachment('marketing-attachments', camp.attachment_url)}>
                   📎 {camp.attachment_name ?? 'Allegato'}
-                </a>
+                </button>
               )}
             </div>
             <span className={'pill ' + (camp.status === 'pronta' ? 'pill-risolta' : 'pill-nuova')}>
@@ -730,8 +731,7 @@ function CampaignForm({
       alert('Non è stato possibile caricare l\'allegato: ' + error.message)
       return
     }
-    const { data } = supabase.storage.from('marketing-attachments').getPublicUrl(path)
-    setAttachmentUrl(data.publicUrl)
+    setAttachmentUrl(path)
     setAttachmentName(file.name)
   }
 
@@ -785,9 +785,9 @@ function CampaignForm({
         <label className="field-label">Allegato (facoltativo — es. scheda tecnica, listino in PDF)</label>
         {attachmentUrl ? (
           <div className="marketing-attachment-row">
-            <a href={attachmentUrl} target="_blank" rel="noreferrer">
+            <button type="button" className="link-button" onClick={() => openAttachment('marketing-attachments', attachmentUrl)}>
               📎 {attachmentName}
-            </a>
+            </button>
             <button
               type="button"
               className="btn btn-ghost"

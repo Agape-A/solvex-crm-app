@@ -1,6 +1,7 @@
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabaseClient'
+import { openAttachment } from '../lib/attachments'
 import { useAuth } from '../context/AuthContext'
 import { CommentThread } from '../components/CommentThread'
 import { ActivityAssignment, createActivityAssignments } from '../components/ActivityAssignment'
@@ -217,8 +218,7 @@ function ResearchDetail({
       alert("Non è stato possibile caricare l'allegato: " + error.message)
       return
     }
-    const { data } = supabase.storage.from('research-attachments').getPublicUrl(path)
-    onChange({ attachment_url: data.publicUrl, attachment_name: file.name })
+    onChange({ attachment_url: path, attachment_name: file.name })
   }
 
   return (
@@ -296,9 +296,9 @@ function ResearchDetail({
         <label className="field-label">Allegato (facoltativo — es. referto, grafico)</label>
         {record.attachment_url ? (
           <div className="marketing-attachment-row">
-            <a href={record.attachment_url} target="_blank" rel="noreferrer">
+            <button type="button" className="link-button" onClick={() => openAttachment('research-attachments', record.attachment_url)}>
               📎 {record.attachment_name}
-            </a>
+            </button>
             <button
               type="button"
               className="btn btn-ghost"
